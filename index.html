@@ -600,6 +600,10 @@ header.bar { padding-top: env(safe-area-inset-top); }
     return appeler('devisFichier').then(function (f) {
       var bin = atob(f.base64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
       var html = new TextDecoder('utf-8').decode(u);
+      // connexion automatique : les devis sont enregistrés sur l'intranet avec le compte de la personne
+      var cx = '<script>window.__XR_CONNEXION=' + JSON.stringify({ url: API, email: S.user.identifiant, token: S.token, viaGoogle: false }).replace(/</g, '\\u003c') + ';<\/script>';
+      var mh = /<head[^>]*>/i.exec(html);
+      html = mh ? html.slice(0, mh.index + mh[0].length) + cx + html.slice(mh.index + mh[0].length) : cx + html;
       var o = document.createElement('div'); o.className = 'ecole';
       o.innerHTML = '<div class="ecole-bar"><b>Logiciel de devis</b><span class="muted small">' + (enLigne() ? 'En ligne' : 'Hors ligne : les devis restent sur cet appareil jusqu\'au retour du réseau') + '</span><button class="btn ghost small" id="dvFermer">Fermer</button></div><div class="ecole-body"><iframe title="Logiciel de devis"></iframe></div>';
       document.body.appendChild(o);
