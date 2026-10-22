@@ -275,7 +275,7 @@ header.bar { padding-top: env(safe-area-inset-top); }
   function enLigne() { return navigator.onLine !== false; }
   function reseau(req) {
     return new Promise(function (ok, ko) {
-      var fini = false, minut = setTimeout(function () { fini = true; ko({ reseau: true, message: 'Réseau trop lent.' }); }, req.action === 'devisFichier' || req.action === 'getFile' || req.action === 'upload' ? 90000 : DELAI_RESEAU);
+      var fini = false, minut = setTimeout(function () { fini = true; ko({ reseau: true, message: 'Réseau trop lent.' }); }, /^(devisFichier|getFile|upload|uploadPerso|devisMaj|importerFacture|relireFacture|importerReleve|corpus)$/.test(req.action) ? 180000 : DELAI_RESEAU);
       fetch(API, { method: 'POST', body: JSON.stringify(req), redirect: 'follow', cache: 'no-store' })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (x) { if (fini) return; fini = true; clearTimeout(minut); ok(x); })
@@ -435,7 +435,7 @@ header.bar { padding-top: env(safe-area-inset-top); }
     if (EN_FILE[action]) return ecritureFile(action, params, req);
     // actions qui demandent le réseau (connexion, comptes, paramètres, distance…)
     if (!enLigne()) return Promise.reject({ message: 'Connexion internet nécessaire pour cette action.' });
-    return reseau(req).then(function (r) { return traiter(r, action, params); }, function () { return Promise.reject({ message: 'Connexion internet nécessaire pour cette action.' }); });
+    return reseau(req).then(function (r) { return traiter(r, action, params); }, function () { return Promise.reject({ message: 'Le serveur ne répond pas (réseau trop lent ou coupé). Réessayez avec une meilleure connexion.' }); });
   }
   function traiter(r, action, params) {
     if (r && r.ok) {
@@ -583,7 +583,7 @@ header.bar { padding-top: env(safe-area-inset-top); }
         prep.total += a.length; afficherEtat();
         var s = Promise.resolve();
         a.forEach(function (f) { s = s.then(function () { if (!enLigne()) return; return L('getFile', f).then(function () { prep.total--; }); }); });
-        if (n('devis') !== 'aucun') s = s.then(function () { return L('devisFichier'); });
+        if (n('devis') !== 'aucun') s = s.then(function () { if (enLigne()) return copieDevis().catch(function () {}); });
         return s;
       });
     }).catch(function () {}).then(function () {
@@ -595,9 +595,26 @@ header.bar { padding-top: env(safe-area-inset-top); }
 
   /* ---------- Logiciel de devis : copie sur l'appareil, ouverte dans l'application ---------- */
   function ticketDevisLocal() { return Promise.reject({ message: 'Utilisez le bouton « Ouvrir le logiciel ».' }); }
+  /** Copie du logiciel sur l'appareil, remplacée dès qu'une nouvelle version est déposée sur l'intranet. */
+  function copieDevis() {
+    var k = cleLecture('devisFichier', {});
+    return lire('cache', k).then(function (loc) {
+      if (!enLigne()) return loc || appeler('devisFichier');
+      return reseau({ action: 'devisInfo', token: S.token }).then(function (r) {
+        var info = r && r.ok ? r.data : null;
+        if (loc && (!info || !info.present || (loc.date && loc.date === info.date))) return loc;
+        if (loc && typeof toast === 'function') toast('Nouvelle version du logiciel de devis : téléchargement…');
+        return reseau({ action: 'devisFichier', token: S.token }).then(function (r2) {
+          if (!r2 || !r2.ok) return loc || traiter(r2, 'devisFichier', {});
+          var d = r2.data; if (!d.date && info) d.date = info.date;
+          return Promise.resolve(ecrire('cache', k, d)).then(function () { return d; });
+        }, function () { return loc || Promise.reject({ message: 'Le serveur ne répond pas : réessayez avec une meilleure connexion.' }); });
+      }, function () { return loc || appeler('devisFichier'); });
+    });
+  }
   function ouvrirDevis() {
     if (typeof toast === 'function') toast('Ouverture du logiciel de devis…');
-    return appeler('devisFichier').then(function (f) {
+    return copieDevis().then(function (f) {
       var bin = atob(f.base64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
       var html = new TextDecoder('utf-8').decode(u);
       // connexion automatique : les devis sont enregistrés sur l'intranet avec le compte de la personne
@@ -645,7 +662,7 @@ header.bar { padding-top: env(safe-area-inset-top); }
         (etat.erreurs.length ? '<div class="card" style="border-color:var(--ko)"><span class="tag" style="color:var(--ko)">Refusé par le serveur</span>' + etat.erreurs.map(function (e) { return '<div class="small">' + esc(e) + '</div>'; }).join('') + '</div>' : '') +
         '<p class="muted small" style="margin:0">Données prêtes hors connexion : ' + (prepDate ? esc(new Date(prepDate).toLocaleString('fr-FR')) : 'jamais') + (est.usage ? ' · espace utilisé sur l\'appareil : ' + taille(est.usage) : '') + '. La préparation télécharge le planning, les chantiers, les formations, les documents et le logiciel de devis.</p>' +
         '<div class="row"><button class="btn primary" id="xsEnv"' + (!enLigne() || !l.length ? ' disabled' : '') + '>Envoyer maintenant</button><button class="btn ghost" id="xsPrep"' + (!enLigne() ? ' disabled' : '') + '>Préparer le hors connexion</button>' + (etat.erreurs.length ? '<button class="btn ghost" id="xsErr">Effacer les refus</button>' : '') + '</div>' +
-        '<div class="card"><span class="tag">Installer l\'application</span><p class="small" style="margin:0"><b>iPhone / iPad</b> (Safari) : bouton Partager → « Sur l\'écran d\'accueil ». <b>Android</b> (Chrome) : menu ⋮ → « Installer l\'application ». <b>Ordinateur</b> (Chrome, Edge) : icône d\'installation dans la barre d\'adresse.</p>' + (window.__xrInstall ? '<div><button class="btn primary small" id="xsInst">Installer maintenant</button></div>' : '') + '</div>' +
+        '<div class="card"><span class="tag">Installer l\'application</span><p class="small" style="margin:0"><b>iPad / iPhone</b> (Chrome) : icône Partager dans la barre d\'adresse → « Ajouter à l\'écran d\'accueil ». <b>Android</b> (Chrome) : menu ⋮ → « Installer l\'application ». <b>Ordinateur</b> (Chrome, Edge) : icône d\'installation dans la barre d\'adresse.</p>' + (window.__xrInstall ? '<div><button class="btn primary small" id="xsInst">Installer maintenant</button></div>' : '') + '</div>' +
         '<div class="row"><button class="btn danger small" id="xsVider">Effacer les données de cet appareil</button><button class="btn ghost" id="xsX">Fermer</button></div>', true);
       var on = function (id, f) { var e = document.getElementById(id); if (e) e.onclick = f; };
       on('xsX', function () { m.fermer(); });
@@ -1676,7 +1693,7 @@ VUES.devis = function () {
     $('view').innerHTML = '<div class="head"><h2>Logiciel de devis</h2><span class="meta">Fiche de mesure, devis et documents de chantier</span></div>' +
       '<div class="grid">' +
       '<article class="card"><span class="tag">Logiciel</span><h3>Ouvrir le logiciel de devis</h3>' +
-      (info.present ? '<p class="muted small" style="margin:0">Version déposée le ' + esc(dateFr(info.date)) + ' · ' + Math.round(info.taille / 1048576 * 10) / 10 + ' Mo. Il s\'ouvre dans un nouvel onglet ; vos devis sont enregistrés sur le serveur avec votre compte (onglet Tarifs du logiciel).</p>' + (info.app && !window.XR ? '<div class="card" style="border-color:var(--gold)"><b>Conseillé : ouvrez le logiciel depuis l\'application Espace Équipe.</b><span class="small">Dans cette page Google, certaines fonctions sont bloquées (villes proposées par internet, choix du dossier de sauvegarde, certains téléchargements). L\'application n\'a pas ces limites et marche sans réseau.</span><div><a class="btn primary" href="' + esc(info.app) + '" target="_blank" rel="noopener">Ouvrir l\'application</a></div></div>' : '') + '<div class="row"><button class="btn ' + (info.app && !window.XR ? 'ghost' : 'primary') + '" id="dvOpen">Ouvrir le logiciel</button><button class="btn ghost" id="dvDl">Télécharger le fichier</button></div><p class="muted small" style="margin:0">« Télécharger le fichier » l\'enregistre sur l\'ordinateur (à ouvrir avec Chrome).</p>'
+      (info.present ? '<p class="muted small" style="margin:0">Version déposée le ' + esc(dateFr(info.date)) + ' · ' + Math.round(info.taille / 1048576 * 10) / 10 + ' Mo. Vos devis sont enregistrés sur l\'intranet : le logiciel se connecte tout seul avec votre compte et les retrouve sur tous vos appareils.</p>' + (info.app && !window.XR ? '<div class="card" style="border-color:var(--gold)"><b>Conseillé : ouvrez le logiciel depuis l\'application Espace Équipe.</b><span class="small">Dans cette page Google, certaines fonctions sont bloquées (villes proposées par internet, choix du dossier de sauvegarde, certains téléchargements). L\'application n\'a pas ces limites et marche sans réseau.</span><div><a class="btn primary" href="' + esc(info.app) + '" target="_blank" rel="noopener">Ouvrir l\'application</a></div></div>' : '') + '<div class="row"><button class="btn ' + (info.app && !window.XR ? 'ghost' : 'primary') + '" id="dvOpen">Ouvrir le logiciel</button><button class="btn ghost" id="dvDl">Télécharger le fichier</button></div><p class="muted small" style="margin:0">« Télécharger le fichier » l\'enregistre sur l\'ordinateur (à ouvrir avec Chrome).</p>'
         : '<div class="empty">Le logiciel n\'est pas encore déposé.' + (peut('devis') ? ' Utilisez « Mettre à jour le logiciel » ci-dessous.' : ' Prévenez le responsable.') + '</div>') + '</article>' +
       '<article class="card"><span class="tag">Avant de chiffrer</span><h3>Calculateur de coût</h3><p class="muted small" style="margin:0">Vérifiez que le prix couvre les charges du chantier : billes, colle, transport, main d\'œuvre, carburant depuis Lizio, compresseur.</p><div>' + (niveau('calculateur') !== 'aucun' ? '<button class="btn ghost" data-go="calculateur">Ouvrir le calculateur</button>' : '<span class="muted small">Accès non ouvert pour votre compte.</span>') + '</div></article>' +
       '<article class="card"><span class="tag">Formation</span><h3>Bien utiliser le logiciel</h3><p class="muted small" style="margin:0">Découverte, lignes et TVA, prime CEE, documents générés, éco-PTZ, acompte et paiement.</p><div>' + (form && form.fileId ? '<button class="btn ghost" id="dvForm">Ouvrir la formation</button>' : '<span class="muted small">Le PDF « Formation — Logiciel de devis » sera disponible ici une fois déposé dans Formation.</span>') + '</div></article>' +
