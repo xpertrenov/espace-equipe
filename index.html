@@ -167,6 +167,15 @@ header.bar form.qs input::placeholder { color: color-mix(in srgb, var(--on-brand
 @media (max-width: 720px) { header.bar .who { display: none; } }
 @media (max-width: 560px) { header.bar .ttl { display: none; } header.bar form.qs { flex: 1 1 auto; } }
 @media (max-width: 560px) { .step { grid-template-columns: auto 1fr; } .step .ctl { grid-column: 2; } header.bar .who span { display: none; } }
+.ffgrid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+.ffgrid #ffApercu:empty { display: none; }
+@media (min-width: 900px) { .modal .box.wide:has(.ffgrid #ffApercu:not(:empty)) { max-width: 1180px; } .ffgrid:has(#ffApercu:not(:empty)) { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); } .ffgrid #ffApercu { position: sticky; top: 0; align-self: start; max-height: calc(100vh - 120px); overflow: auto; } }
+:root { --s1: #b8893a; --s2: #2f6fb8; }
+@media (prefers-color-scheme: dark) { :root { --s1: #b88a3c; --s2: #3d7fcc; } }
+path.gs1 { fill: var(--s1); } path.gs2 { fill: var(--s2); } path.gs1:hover, path.gs2:hover { opacity: .8; }
+.gl { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; } .gl.gs1 { background: var(--s1); } .gl.gs2 { background: var(--s2); }
+details.card > summary { cursor: pointer; }
+@media (max-width: 640px) { .ctabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; } .ctabs .btn { flex: none; } }
 .xrsync { border-radius: 999px !important; font-size: 12px !important; white-space: nowrap; }
 .xrsync.ok { border-color: color-mix(in srgb, #7fd3a0 70%, transparent) !important; }
 .xrsync.warn { background: #f0b86033 !important; border-color: #f0b860 !important; }
@@ -275,7 +284,7 @@ header.bar { padding-top: env(safe-area-inset-top); }
   function enLigne() { return navigator.onLine !== false; }
   function reseau(req) {
     return new Promise(function (ok, ko) {
-      var fini = false, minut = setTimeout(function () { fini = true; ko({ reseau: true, message: 'Réseau trop lent.' }); }, /^(devisFichier|getFile|upload|uploadPerso|devisMaj|importerFacture|relireFacture|importerReleve|corpus)$/.test(req.action) ? 180000 : DELAI_RESEAU);
+      var fini = false, minut = setTimeout(function () { fini = true; ko({ reseau: true, message: 'Réseau trop lent.' }); }, /^(devisFichier|getFile|upload|uploadPerso|devisMaj|importerFacture|relireFacture|importerReleve|importerFacturesListe|corpus)$/.test(req.action) ? 180000 : DELAI_RESEAU);
       fetch(API, { method: 'POST', body: JSON.stringify(req), redirect: 'follow', cache: 'no-store' })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (x) { if (fini) return; fini = true; clearTimeout(minut); ok(x); })
@@ -556,7 +565,7 @@ header.bar { padding-top: env(safe-area-inset-top); }
     if (n('formation') !== 'aucun') { tables.DocsFormation = L('list', { table: 'DocsFormation' }); t.push(L('ecoleHtml'), L('comHtml'), L('injHtml')); }
     if (n('documents') !== 'aucun') tables.Documents = L('list', { table: 'Documents' });
     if (n('calculateur') !== 'aucun') t.push(L('list', { table: 'Calculs' }), L('paramsCalcul'));
-    if (n('factures') !== 'aucun') t.push(L('list', { table: 'Factures' }), L('list', { table: 'Banque' }));
+    if (n('factures') !== 'aucun') ['Factures', 'Banque', 'Immobilisations', 'OD', 'PiecesBilan', 'ComptaParams'].forEach(function (tb) { t.push(L('list', { table: tb })); });
     if (n('recherche') !== 'aucun') t.push(L('corpus'), L('indexDonnees'));
     if (n('devis') !== 'aucun' && !o.leger) t.push(L('devisInfo'));
     t.push(L('listPerso', { mine: true }));
@@ -735,7 +744,7 @@ var MODULES = [
   { k: 'chantiers', l: 'Chantiers', g: 'Terrain', mots: 'fiche photos' }, { k: 'planning', l: 'Planning', g: 'Terrain', mots: 'agenda semaine' }, { k: 'logistique', l: 'Logistique', g: 'Terrain', mots: 'matériel camion stock' },
   { k: 'devis', l: 'Devis', g: 'Commercial', mots: 'logiciel fiche mesure' }, { k: 'calculateur', l: 'Calculateur', g: 'Commercial', mots: 'coût marge prix carburant distance' },
   { k: 'formation', l: 'Formation', g: 'Équipe', mots: 'cours quiz' }, { k: 'social', l: 'Social', g: 'Équipe', mots: 'bulletin salaire contrat rh' },
-  { k: 'factures', l: 'Factures', g: 'Administratif', mots: 'tva encaissement banque relevé compta comptable csv' }
+  { k: 'factures', l: 'Comptabilité', g: 'Administratif', mots: 'factures tva encaissement banque relevé compta comptable csv bilan résultat amortissement immobilisation ik fec' }
 ];
 function ongletVisible(k) {
   if (k === 'accueil') return true;
@@ -897,6 +906,123 @@ function lireFichier(file, maxPx) {
     };
     r.readAsDataURL(file);
   });
+}
+/* ---------- Date et position GPS d'une photo (EXIF d'un JPEG), sans bibliothèque externe ---------- */
+function isoLocal(d) { var z = function (n) { return (n < 10 ? '0' : '') + n; }; return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + 'T' + z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds()); }
+function lireExif(file) {
+  return new Promise(function (resolve) {
+    if (!file || !/jpe?g/i.test(file.type || file.name || '')) return resolve({});
+    var r = new FileReader();
+    r.onload = function () { try { resolve(exifDe(new DataView(r.result))); } catch (e) { resolve({}); } };
+    r.onerror = function () { resolve({}); };
+    r.readAsArrayBuffer(file.slice(0, 256 * 1024));
+  });
+}
+function exifDe(v) {
+  if (v.getUint16(0) !== 0xFFD8) return {};
+  var o = 2;
+  while (o + 4 < v.byteLength) {
+    var m = v.getUint16(o), len = v.getUint16(o + 2);
+    if (m === 0xFFE1 && v.getUint32(o + 4) === 0x45786966) return tiffDe(v, o + 10);
+    if ((m & 0xFF00) !== 0xFF00) break;
+    o += 2 + len;
+  }
+  return {};
+}
+function tiffDe(v, t) {
+  var le = v.getUint16(t) === 0x4949, u16 = function (p) { return v.getUint16(p, le); }, u32 = function (p) { return v.getUint32(p, le); };
+  var lireIfd = function (p) { var n = u16(p), e = {}; for (var i = 0; i < n; i++) { var q = p + 2 + i * 12; e[u16(q)] = { type: u16(q + 2), n: u32(q + 4), val: q + 8 }; } return e; };
+  var texte = function (e) { var p = e.n > 4 ? t + u32(e.val) : e.val, s = ''; for (var i = 0; i < e.n - 1; i++) s += String.fromCharCode(v.getUint8(p + i)); return s; };
+  var rats = function (e) { var p = t + u32(e.val), r = []; for (var i = 0; i < e.n; i++) r.push(u32(p + i * 8) / (u32(p + i * 8 + 4) || 1)); return r; };
+  var res = {}, ifd0 = lireIfd(t + u32(t + 4));
+  var date = '';
+  if (ifd0[0x8769]) { var ex = lireIfd(t + u32(ifd0[0x8769].val)); if (ex[0x9003]) date = texte(ex[0x9003]); }
+  if (!date && ifd0[0x0132]) date = texte(ifd0[0x0132]);
+  var md = /^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(date);
+  if (md && md[1] !== '0000') res.prisLe = md[1] + '-' + md[2] + '-' + md[3] + 'T' + md[4] + ':' + md[5] + ':' + md[6];
+  if (ifd0[0x8825]) {
+    var g = lireIfd(t + u32(ifd0[0x8825].val));
+    if (g[2] && g[4]) {
+      var dms = function (a) { return a[0] + a[1] / 60 + a[2] / 3600; };
+      var lat = dms(rats(g[2])), lon = dms(rats(g[4]));
+      var ns = g[1] ? String.fromCharCode(v.getUint8(g[1].val)) : 'N', eo = g[3] ? String.fromCharCode(v.getUint8(g[3].val)) : 'E';
+      if (ns === 'S') lat = -lat; if (eo === 'W') lon = -lon;
+      if (isFinite(lat) && isFinite(lon) && (lat || lon)) { res.lat = Math.round(lat * 1e5) / 1e5; res.lon = Math.round(lon * 1e5) / 1e5; }
+    }
+  }
+  return res;
+}
+/** Position du téléphone au moment de la prise (photo prise depuis l'intranet, sans GPS dans le fichier). */
+function positionAppareil() {
+  return new Promise(function (resolve) {
+    if (!navigator.geolocation) return resolve(null);
+    var fini = false, t = setTimeout(function () { if (!fini) { fini = true; resolve(null); } }, 9000);
+    navigator.geolocation.getCurrentPosition(function (p) { if (fini) return; fini = true; clearTimeout(t); resolve({ lat: Math.round(p.coords.latitude * 1e5) / 1e5, lon: Math.round(p.coords.longitude * 1e5) / 1e5 }); },
+      function () { if (fini) return; fini = true; clearTimeout(t); resolve(null); }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+  });
+}
+
+/* ---------- Photos à valider pour le site internet (super admin et administratifs) ---------- */
+var STATUT_SITE = { a_valider: 'À valider', validee_attente: 'Validée — en attente d\'envoi sur le site', publiee: 'Publiée sur le site', validee_sans_publier: 'Validée sans publier', refusee: 'Refusée' };
+function photosAValider() {
+  var m = modale('Photos à valider pour le site', '<div id="pvZone"><p class="muted">Chargement…</p></div><div class="row" style="margin-top:10px"><button class="btn ghost" id="pvX">Fermer</button></div>', true);
+  $('pvX').onclick = function () { m.fermer(); };
+  function charger() {
+    call('photosAValider').then(function (r) {
+      var zone = m.querySelector('#pvZone'); if (!zone) return;
+      var opt = function (sel) { return '<option value="">— hors secteurs —</option>' + r.secteurs.map(function (s) { return '<option value="' + esc(s.slug) + '"' + (s.slug === sel ? ' selected' : '') + '>' + esc(s.nom) + '</option>'; }).join(''); };
+      zone.innerHTML = (r.wix ? '' : '<div class="card" style="border-color:var(--warn,#c9963e)"><b>Publication sur le site pas encore activée.</b> <span class="small muted">Vous pouvez déjà valider : les photos partiront sur xpertrenov.net dès que la clé API Wix sera enregistrée (bouton « Réessayer l\'envoi »).</span></div>') +
+        '<p class="small muted" style="margin:0">Seules la <b>commune</b> et le <b>département</b> sont publiés : jamais la position GPS ni l\'adresse. La photo est rattachée au secteur choisi (page /isolation/…). Refusez les photos avec des visages, plaques ou numéros de rue lisibles.</p>' +
+        (r.photos.length ? r.photos.map(function (p) {
+          return '<article class="card pv" data-id="' + esc(p.id) + '"><div class="row" style="align-items:flex-start;gap:12px;flex-wrap:wrap">' +
+            '<img alt="Photo de chantier" data-file="' + esc(p.fileId) + '" style="width:180px;max-width:100%;border-radius:8px;background:var(--surface-2,#eee);min-height:120px;object-fit:cover">' +
+            '<div style="flex:1;min-width:220px"><span class="pill">' + esc(STATUT_SITE[p.statutSite] || p.statutSite) + '</span> <b>' + esc(p.client || 'Chantier') + '</b> · ' + esc(p.zone) + ' · ' + esc(p.phase) +
+            '<p class="small muted" style="margin:4px 0">Prise le ' + (p.prisLe ? esc(dateFr(p.prisLe.slice(0, 10))) + ' à ' + esc(p.prisLe.slice(11, 16)) : '— (date inconnue)') + ' · ' + (p.lat ? 'GPS ' + (p.gpsSource === 'appareil' ? 'du téléphone' : 'de la photo') : 'pas de GPS') + ' · envoyée par ' + esc(nomDe(p.auteur)) + '</p>' +
+            (p.wixErreur ? '<p class="small" style="color:var(--danger,#b3261e);margin:4px 0">' + esc(p.wixErreur) + '</p>' : '') +
+            '<div class="row" style="gap:8px;flex-wrap:wrap"><label class="f" style="flex:1;min-width:140px">Commune publiée<input data-k="commune" value="' + esc(p.commune || '') + '" placeholder="ex. Vannes"></label>' +
+            '<label class="f" style="flex:1;min-width:140px">Secteur du site<select data-k="secteur">' + opt(p.secteur) + '</select></label></div>' +
+            '<label class="f" style="max-width:160px">Département<input data-k="departement" value="' + esc(p.departement || '') + '" placeholder="ex. Morbihan"></label>' +
+            '<label class="f">Texte alternatif (référencement)<input data-k="altTexte" maxlength="200" data-auto="' + (p.altTexte ? '' : '1') + '" value="' + esc(p.altTexte || p.altDefaut || '') + '"></label>' +
+            '<label class="f">Légende visible sur le site<input data-k="legende" maxlength="200" data-auto="' + (p.legende ? '' : '1') + '" value="' + esc(p.legende || p.legendeDefaut || '') + '"></label>' +
+            '<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px">' +
+            '<button class="btn primary small" data-a="publier">' + (p.statutSite === 'validee_attente' ? 'Réessayer l\'envoi' : 'Valider et publier') + '</button>' +
+            '<button class="btn ghost small" data-a="sans">Valider sans publier</button><button class="btn ghost small" data-a="refuser">Refuser</button></div></div></div></article>';
+        }).join('') : '<div class="empty">Aucune photo en attente.</div>');
+      zone.querySelectorAll('img[data-file]').forEach(function (img) {
+        var cle = 'th_' + img.dataset.file;
+        if (S.cache[cle]) { img.src = S.cache[cle]; return; }
+        call('getFile', { fileId: img.dataset.file, miniature: true }).then(function (f) { S.cache[cle] = 'data:' + f.mimeType + ';base64,' + f.base64; img.src = S.cache[cle]; }).catch(function () {});
+      });
+      zone.querySelectorAll('.pv').forEach(function (art) {
+        var v = function (k) { var el = art.querySelector('[data-k="' + k + '"]'); return el ? el.value.trim() : ''; };
+        var p = r.photos.filter(function (x) { return x.id === art.dataset.id; })[0];
+        var regen = function () {   // textes SEO recalculés tant qu'ils n'ont pas été modifiés à la main
+          var com = v('commune'), dep = v('departement'), d = String(p.prisLe || p.date || ''), mm = /^(\d{4})-(\d{2})/.exec(d), tr = p.travaux || "Travaux d'isolation";
+          var alt = art.querySelector('[data-k="altTexte"]'), leg = art.querySelector('[data-k="legende"]');
+          if (alt.dataset.auto) alt.value = tr + (com ? ' à ' + com : '') + (dep ? ' (' + dep + ')' : '') + " – Xpert'Renov";
+          if (leg.dataset.auto) leg.value = tr + (com ? ' à ' + com : '') + (mm ? ', ' + r.mois[+mm[2] - 1] + ' ' + mm[1] : '');
+        };
+        ['commune', 'departement'].forEach(function (k) { art.querySelector('[data-k="' + k + '"]').addEventListener('input', regen); });
+        ['altTexte', 'legende'].forEach(function (k) { var el = art.querySelector('[data-k="' + k + '"]'); el.addEventListener('input', function () { el.dataset.auto = ''; }); });
+        art.querySelectorAll('[data-a]').forEach(function (b) {
+          b.onclick = function () {
+            var a = b.dataset.a;
+            if (a === 'publier' && !v('commune')) return toast('Indiquez la commune à publier.');
+            art.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+            var req = a === 'refuser' ? call('refuserPhoto', { id: art.dataset.id }) : call('validerPhoto', { id: art.dataset.id, publier: a === 'publier', commune: v('commune'), departement: v('departement'), secteur: v('secteur'), legende: v('legende'), altTexte: v('altTexte') });
+            req.then(function (res) {
+              if (a === 'refuser') toast('Photo refusée : elle ne sera pas publiée.');
+              else if (res.statutSite === 'publiee') toast('Photo publiée sur le site.');
+              else if (res.statutSite === 'validee_attente') toast('Photo validée. Envoi sur le site en attente : ' + res.wixErreur);
+              else toast('Photo validée sans publication.');
+              charger();
+            }).catch(function (e) { art.querySelectorAll('button').forEach(function (x) { x.disabled = false; }); echec(e); });
+          };
+        });
+      });
+    }).catch(echec);
+  }
+  charger();
 }
 function formData(form) { var o = {}; form.querySelectorAll('[name]').forEach(function (el) { o[el.name] = el.type === 'checkbox' ? el.checked : el.value; }); return o; }
 
@@ -1258,10 +1384,14 @@ VUES.chantiers = function () {
     S.cache.chantiers = cs;
     var filtre = S.cache.statut || 'Tous', modif = peut('chantiers');
     var liste = cs.filter(function (c) { return filtre === 'Tous' || c.statut === filtre; }).sort(function (a, b) { return String(b.dateDebut).localeCompare(String(a.dateDebut)); });
-    $('view').innerHTML = '<div class="head"><h2>Chantiers</h2>' + (modif ? '<button class="btn primary small" id="chAdd">Nouveau chantier</button>' : '') + '</div>' +
+    $('view').innerHTML = '<div class="head"><h2>Chantiers</h2>' + (gestionnaire() ? '<button class="btn ghost small" id="phVal">Photos à valider</button> ' : '') + (modif ? '<button class="btn primary small" id="chAdd">Nouveau chantier</button>' : '') + '</div>' +
       '<div class="row"><input id="chQ" placeholder="Rechercher un client, une ville…" style="flex:1;min-width:200px;padding:9px 11px;border-radius:7px;border:1.5px solid var(--line);background:var(--surface)"></div>' +
       '<div class="chips">' + ['Tous'].concat(STATUTS).map(function (s) { return '<button class="chip" data-st="' + s + '" aria-pressed="' + (s === filtre) + '">' + s + '</button>'; }).join('') + '</div>' +
       '<div class="tablewrap"><table><thead><tr><th>Client</th><th>Ville</th><th>Début</th><th>Statut</th></tr></thead><tbody id="chBody"></tbody></table></div>';
+    if ($('phVal')) {
+      $('phVal').onclick = function () { photosAValider(); };
+      call('photosAValider').then(function (r) { var n = r.photos.filter(function (p) { return p.statutSite === 'a_valider'; }).length; if ($('phVal') && n) $('phVal').textContent = 'Photos à valider (' + n + ')'; }).catch(function () {});
+    }
     function rendre() {
       var q = ($('chQ').value || '').toLowerCase();
       var l = liste.filter(function (c) { return !q || (c.client + ' ' + c.ville + ' ' + c.adresse).toLowerCase().indexOf(q) >= 0; });
@@ -1366,7 +1496,7 @@ function photosChantier(c) {
         PHASES.map(function (p) {
           var l = ph.filter(function (x) { return x.zone === z && x.phase === p; });
           return '<div class="phase"><h4>' + p + ' <span class="muted">' + l.length + '</span></h4><div class="thumbs">' + l.map(function (x) { return '<button class="thumb" data-ph="' + esc(x.id) + '" aria-label="Photo ' + esc(x.nom) + '"><img alt="" data-file="' + esc(x.fileId) + '"></button>'; }).join('') + '</div>' +
-            (ajout ? '<label class="btn ghost small upl">+ Ajouter des photos<input type="file" accept="image/*" multiple data-up="' + z + '|' + p + '"></label>' : '') + '</div>';
+            (ajout ? '<label class="btn ghost small upl">Prendre une photo<input type="file" accept="image/*" capture="environment" data-cam="1" data-up="' + z + '|' + p + '"></label> <label class="btn ghost small upl">+ Ajouter des photos<input type="file" accept="image/*" multiple data-up="' + z + '|' + p + '"></label>' : '') + '</div>';
         }).join('') + '</div></details>';
     }).join('') + '</div>';
     $('chZone').querySelectorAll('details').forEach(function (d) { d.addEventListener('toggle', function () { if (d.open) { S.cache.zoneOuverte = d.dataset.z; chargerMiniatures(d); } }); if (d.open) chargerMiniatures(d); });
@@ -1388,7 +1518,14 @@ function envoyerPhotos(c, inp) {
   function suivant() {
     if (i >= fichiers.length) { toast(ok + ' photo(s) envoyée(s).'); S.cache.zoneOuverte = p[0]; ouvrir('chantiers'); return; }
     lbl.firstChild.textContent = 'Envoi ' + (i + 1) + ' / ' + fichiers.length + '…';
-    lireFichier(fichiers[i++], 1600).then(function (f) { return call('upload', { table: 'Photos', meta: { chantierId: c.id, zone: p[0], phase: p[1] }, nom: f.nom, mimeType: f.mimeType, base64: f.base64 }); })
+    var fichier = fichiers[i++], meta = { chantierId: c.id, zone: p[0], phase: p[1] };
+    // date et GPS lus dans la photo d'origine AVANT la réduction (qui efface ces informations)
+    lireExif(fichier).then(function (x) {
+      if (x.prisLe) meta.prisLe = x.prisLe;
+      if (x.lat != null) { meta.lat = x.lat; meta.lon = x.lon; meta.gpsSource = 'photo'; return; }
+      if (inp.dataset.cam) return positionAppareil().then(function (g) { if (!meta.prisLe) meta.prisLe = isoLocal(new Date()); if (g) { meta.lat = g.lat; meta.lon = g.lon; meta.gpsSource = 'appareil'; } });
+    }).then(function () { return lireFichier(fichier, 1600); })
+      .then(function (f) { return call('upload', { table: 'Photos', meta: meta, nom: f.nom, mimeType: f.mimeType, base64: f.base64 }); })
       .then(function () { ok++; }).catch(echec).then(suivant);
   }
   suivant();
@@ -1929,7 +2066,8 @@ function formParams(P) {
   };
 }
 
-/* ===================== FACTURES, BANQUE ET TVA ===================== */
+/* ===================== COMPTABILITÉ : FACTURES, BANQUE, TVA, RÉSULTAT, BILAN ===================== */
+/* @@COMPTA-UI-DEBUT */
 var PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 var pdfjsPret = null;
 /** Charge pdf.js (lecture du texte des PDF dans le navigateur). Le « worker » est recréé localement pour fonctionner dans la page Google. */
@@ -2043,37 +2181,670 @@ function propositions(op, factures) {
   }).filter(function (x) { return x.s >= 35; }).sort(function (a, b) { return b.s - a.s; }).slice(0, 3);
 }
 
-/* ---------- Onglet Factures ---------- */
+/* @@MOTEUR-DEBUT */
+/**
+ * Moteur comptable : à partir des factures, des relevés de compte, des immobilisations, des écritures diverses
+ * et des réglages, il produit les écritures en partie double, la TVA sur les encaissements (CA3 / CA12),
+ * le compte de résultat et le bilan simplifiés (présentation 2033) et le fichier des écritures (FEC).
+ * C'est une PRÉPARATION pour l'expert-comptable : il vérifie, ajuste et dépose.
+ */
+var CPT = (function () {
+  function n(v) { var x = parseFloat(String(v == null ? '' : v).replace(/[\s  ]/g, '').replace(',', '.')); return isFinite(x) ? x : 0; }
+  function r2(v) { return Math.round((v + (v >= 0 ? 1e-9 : -1e-9)) * 100) / 100; }
+  function sa(t) { return String(t == null ? '' : t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function jour(iso, delta) { var d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + delta); return d.toISOString().slice(0, 10); }
+  function jours(a, b) { return Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5); }
+  function dans(d, du, au) { return !!d && d >= du && d <= au; }
+
+  /* ---------- Plan comptable (extrait du plan comptable général, adapté à une entreprise du bâtiment) ---------- */
+  var PLAN = [
+    ['601', 'Matériaux et matières premières (isolants…)', 'Achats et charges'], ['602', 'Autres approvisionnements', 'Achats et charges'],
+    ['604', 'Prestations incorporées aux travaux', 'Achats et charges'], ['6031', 'Variation des stocks de matériaux', 'Achats et charges'],
+    ['6061', 'Électricité, eau, gaz', 'Achats et charges'], ['60622', 'Carburant', 'Achats et charges'],
+    ['6063', 'Petit équipement et outillage (moins de 500 € HT)', 'Achats et charges'], ['6064', 'Fournitures administratives', 'Achats et charges'],
+    ['6068', 'Autres fournitures', 'Achats et charges'], ['607', 'Marchandises revendues en l\'état', 'Achats et charges'],
+    ['611', 'Sous-traitance', 'Achats et charges'], ['6132', 'Loyers des locaux', 'Achats et charges'],
+    ['6135', 'Locations de matériel et de véhicules', 'Achats et charges'], ['615', 'Entretien et réparations', 'Achats et charges'],
+    ['61551', 'Entretien des véhicules', 'Achats et charges'], ['616', 'Assurances', 'Achats et charges'],
+    ['6181', 'Documentation', 'Achats et charges'], ['6185', 'Formations, séminaires', 'Achats et charges'],
+    ['6226', 'Honoraires (comptable, avocat…)', 'Achats et charges'], ['623', 'Publicité, site internet, annonces', 'Achats et charges'],
+    ['6241', 'Transports sur achats', 'Achats et charges'], ['6251', 'Déplacements, péages, indemnités kilométriques', 'Achats et charges'],
+    ['6256', 'Hôtels (déplacements)', 'Achats et charges'], ['6257', 'Repas et réceptions', 'Achats et charges'],
+    ['626', 'Téléphone, internet, affranchissement', 'Achats et charges'], ['627', 'Frais bancaires', 'Achats et charges'],
+    ['6281', 'Cotisations professionnelles', 'Achats et charges'], ['635', 'Impôts et taxes (CFE…)', 'Achats et charges'],
+    ['637', 'Autres impôts et taxes', 'Achats et charges'], ['641', 'Salaires bruts du personnel', 'Achats et charges'],
+    ['644', 'Rémunération du dirigeant', 'Achats et charges'], ['645', 'Cotisations sociales (URSSAF, retraite…)', 'Achats et charges'],
+    ['646', 'Cotisations sociales personnelles de l\'exploitant', 'Achats et charges'], ['651', 'Licences et logiciels', 'Achats et charges'],
+    ['658', 'Charges diverses', 'Achats et charges'], ['661', 'Intérêts des emprunts', 'Achats et charges'],
+    ['671', 'Charges exceptionnelles', 'Achats et charges'], ['675', 'Valeur des immobilisations cédées', 'Achats et charges'],
+    ['6811', 'Dotations aux amortissements', 'Achats et charges'], ['695', 'Impôt sur les sociétés', 'Achats et charges'],
+    ['701', 'Ventes de produits', 'Ventes et produits'], ['704', 'Travaux', 'Ventes et produits'], ['706', 'Prestations de services', 'Ventes et produits'],
+    ['707', 'Ventes de marchandises', 'Ventes et produits'], ['708', 'Produits annexes (refacturations)', 'Ventes et produits'],
+    ['74', 'Subventions d\'exploitation', 'Ventes et produits'], ['758', 'Produits divers', 'Ventes et produits'],
+    ['768', 'Produits financiers', 'Ventes et produits'], ['771', 'Produits exceptionnels', 'Ventes et produits'],
+    ['775', 'Prix de cession d\'immobilisations', 'Ventes et produits'],
+    ['205', 'Logiciels, site internet', 'Immobilisations'], ['207', 'Fonds commercial', 'Immobilisations'],
+    ['2154', 'Matériel et outillage (machines, souffleuses…)', 'Immobilisations'], ['2182', 'Véhicules', 'Immobilisations'],
+    ['2183', 'Matériel informatique et de bureau', 'Immobilisations'], ['2184', 'Mobilier', 'Immobilisations'],
+    ['275', 'Dépôts et cautionnements', 'Immobilisations'],
+    ['101', 'Capital', 'Capitaux, tiers et banque'], ['1061', 'Réserve légale', 'Capitaux, tiers et banque'], ['1068', 'Autres réserves', 'Capitaux, tiers et banque'],
+    ['110', 'Report à nouveau', 'Capitaux, tiers et banque'], ['120', 'Résultat de l\'exercice précédent (non affecté)', 'Capitaux, tiers et banque'],
+    ['164', 'Emprunts bancaires', 'Capitaux, tiers et banque'], ['31', 'Stock de matériaux', 'Capitaux, tiers et banque'], ['37', 'Stock de marchandises', 'Capitaux, tiers et banque'],
+    ['401', 'Fournisseurs', 'Capitaux, tiers et banque'], ['404', 'Fournisseurs d\'immobilisations', 'Capitaux, tiers et banque'], ['411', 'Clients', 'Capitaux, tiers et banque'],
+    ['421', 'Salaires nets à payer', 'Capitaux, tiers et banque'], ['431', 'URSSAF', 'Capitaux, tiers et banque'], ['437', 'Autres organismes sociaux', 'Capitaux, tiers et banque'],
+    ['444', 'Impôt sur les sociétés (État)', 'Capitaux, tiers et banque'], ['447', 'Autres impôts (État)', 'Capitaux, tiers et banque'],
+    ['44551', 'TVA payée au Trésor', 'Capitaux, tiers et banque'], ['44562', 'TVA déductible sur immobilisations', 'Capitaux, tiers et banque'],
+    ['44566', 'TVA déductible', 'Capitaux, tiers et banque'], ['44568', 'TVA déductible en attente de paiement', 'Capitaux, tiers et banque'],
+    ['44571', 'TVA collectée', 'Capitaux, tiers et banque'], ['44574', 'TVA collectée en attente d\'encaissement', 'Capitaux, tiers et banque'],
+    ['455', 'Compte courant du dirigeant', 'Capitaux, tiers et banque'], ['467', 'Prime CEE à recevoir, autres débiteurs', 'Capitaux, tiers et banque'],
+    ['471', 'Compte d\'attente (à classer)', 'Capitaux, tiers et banque'], ['486', 'Charges constatées d\'avance', 'Capitaux, tiers et banque'],
+    ['487', 'Produits constatés d\'avance', 'Capitaux, tiers et banque'], ['511', 'Paiements non vus sur un relevé', 'Capitaux, tiers et banque'],
+    ['512', 'Banque', 'Capitaux, tiers et banque'], ['53', 'Caisse (espèces)', 'Capitaux, tiers et banque'], ['58', 'Virements internes', 'Capitaux, tiers et banque']
+  ];
+  var LIB = {}; PLAN.forEach(function (p) { LIB[p[0]] = p[1]; });
+  function libelle(c) {
+    c = String(c || '');
+    if (LIB[c]) return LIB[c];
+    if (/^28/.test(c)) return 'Amortissements : ' + libelle('2' + c.slice(2)).toLowerCase();
+    for (var k = c.length - 1; k >= 2; k--) if (LIB[c.slice(0, k)]) return LIB[c.slice(0, k)];
+    return 'Compte ' + c;
+  }
+  var DUREES = { '205': 3, '207': 0, '2154': 5, '2182': 5, '2183': 3, '2184': 10, '275': 0 };   // durées d'amortissement usuelles (années)
+
+  /* ---------- Classement des opérations bancaires sans facture ---------- */
+  var REGLES_BANQUE = [
+    [/urssaf|pole emploi|france travail|retraite|klesia|pro btp|probtp|humanis|malakoff|ag2r/, '645'],
+    [/(dgfip|tresor public|finances publiques|impots?\.gouv|\bsie\b).*(\bis\b|impot sur les soc|acompte is)|(\bis\b|impot sur les soc).*(dgfip|tresor)/, '444'],
+    [/cfe|cotisation fonciere/, '635'],
+    [/dgfip|tresor public|finances publiques|impots?\.gouv|\btva\b/, '44551'],
+    [/interets? debiteurs|agios/, '661'],
+    [/frais|commission|cotisation (carte|offre|compte|mensuelle)|abonnement (banc|offre)|tenue de compte/, '627'],
+    [/ech(eance)? ?pret|remboursement (de )?pret|\bpret\b|\bemprunt\b|credit immo/, '164'],
+    [/salaire|\bpaie\b|acompte sur salaire/, '421'],
+    [/retrait|\bdab\b|distributeur/, '53'],
+    [/livret|epargne|virement interne|compte a terme/, '58'],
+    [/assurance|\baxa\b|\bmaaf\b|\bmaif\b|macif|smabtp|allianz|groupama|generali|\bmma\b|hiscox/, '616'],
+    [/carbu|esso|\bavia\b|\bshell\b|\bbp\b|total ?energies|station|as24|\bdkv\b/, '60622'],
+    [/\borange\b|\bsfr\b|bouygues tel|free mobile|freebox/, '626'],
+    [/peage|autoroute|sanef|\baprr\b|vinci auto|parking/, '6251'],
+    [/restaurant|\bresto\b|brasserie|mcdo|burger|traiteur/, '6257'],
+    [/hotel|\bibis\b|campanile|b&b/, '6256'],
+    [/google|\bwix\b|\bovh\b|ionos|microsoft|adobe|canva|henrri|apple\.com/, '651'],
+    [/point p|bigmat|gedimat|cedeo|leroy merlin|castorama|brico|\bsamse\b|isocell|materiaux/, '601'],
+    [/kiloutou|loxam/, '6135']
+  ];
+  function classerOperation(op) {
+    var l = sa(op.libelle), m = n(op.montant);
+    if (m > 0) {
+      if (/engie|\bcee\b|prime energie|certificat|igloo/.test(l)) return { compte: '467', sur: false };
+      if (/apport|augmentation de capital/.test(l)) return { compte: '455', sur: false };
+      if (/remboursement|avoir|retour/.test(l)) return { compte: '471', sur: false };
+      if (/\bpret\b|deblocage|emprunt/.test(l)) return { compte: '164', sur: true };
+      return { compte: '', sur: false };
+    }
+    for (var i = 0; i < REGLES_BANQUE.length; i++) if (REGLES_BANQUE[i][0].test(l)) return { compte: REGLES_BANQUE[i][1], sur: !/^(44551|53|58)$/.test(REGLES_BANQUE[i][1]) };
+    return { compte: '', sur: false };
+  }
+
+  /* ---------- Exercice ---------- */
+  function exercice(annee, prm) {
+    var d = ((prm && prm.societe && prm.societe.debutExercice) || '01-01').slice(0, 5);
+    annee = String(annee);
+    if (d === '01-01') return { annee: annee, du: annee + '-01-01', au: annee + '-12-31' };
+    var du = (+annee - 1) + '-' + d;
+    return { annee: annee, du: du, au: jour(annee + '-' + d, -1) };
+  }
+
+  /* ---------- Montants d'une facture ---------- */
+  function tvaDe(f) { return (f.lignesTva || []).reduce(function (s, x) { return s + n(x.montant); }, 0); }
+  function sansTva(f) { return f.autoliq === 'oui' || !(f.lignesTva || []).some(function (x) { return n(x.taux) > 0 && n(x.montant); }); }
+  function chiffres(f) {
+    var ht = n(f.ht), tva = sansTva(f) ? 0 : tvaDe(f), ttc = n(f.ttc) || r2(ht + tva);
+    if (!ht && ttc) ht = r2(ttc - tva);
+    return { ht: ht, tva: tva, ttc: ttc, cee: n(f.cee) };
+  }
+  /** Compte de trésorerie d'un paiement : banque (vu sur un relevé), caisse, compte courant du dirigeant, ou « non vu sur un relevé ». */
+  function compteTreso(e) {
+    if (e.origine === 'banque') return '512';
+    var m = sa(e.mode);
+    if (/espece/.test(m)) return '53';
+    if (/perso|compte courant|dirigeant|associe/.test(m)) return '455';
+    return '511';
+  }
+  function confirme(e) { return e.origine === 'banque' || /^(53|455)$/.test(compteTreso(e)); }
+  function tiersCode(t) { return sa(t).replace(/[^a-z0-9]/g, '').slice(0, 17).toUpperCase(); }
+
+  /* ---------- Écritures en partie double ---------- */
+  // Une écriture : { date, j (journal), piece, lib, tiers, src, l: [{ c: compte, m: montant (+ débit / − crédit) }] }
+  function ecritures(D, prm) {
+    prm = prm || {}; var soc = prm.societe || {};
+    var out = [], ouv = prm.ouverture || {}, dMin = ouv.date || '0000-00-00';
+    var add = function (date, j, piece, lib, lignes, src, tiers) {
+      var l = lignes.filter(function (x) { return Math.abs(x.m) >= 0.005; }).map(function (x) { return { c: String(x.c), m: r2(x.m) }; });
+      if (!l.length) return;
+      var ecart = r2(l.reduce(function (s, x) { return s + x.m; }, 0));
+      if (Math.abs(ecart) >= 0.01) l.push({ c: '471', m: -ecart });   // déséquilibre (montants incohérents) : l'écart va au compte d'attente
+      out.push({ date: date, j: j, piece: piece || '', lib: String(lib || '').slice(0, 120), tiers: tiers || '', src: src || '', l: l });
+    };
+    // 1) bilan d'ouverture (ancien bilan)
+    if (ouv.date && (ouv.lignes || []).length) add(ouv.date, 'AN', 'OUV', 'Bilan d\'ouverture', (ouv.lignes || []).map(function (x) { return { c: x.compte, m: n(x.debit) - n(x.credit) }; }), 'ouverture');
+    var factures = (D.factures || []).filter(function (f) { return f.date; });
+    var parId = {}; factures.forEach(function (f) { parId[f.id] = f; });
+    var opsCee = {}; (D.ops || []).forEach(function (o) { if (o.factureId && o.nature === 'cee') opsCee[o.factureId] = o; });
+    factures.forEach(function (f) {
+      var c = chiffres(f), piece = f.numero || f.id, apres = f.date >= dMin;
+      if (f.sens === 'vente') {
+        var cpt = f.compte || soc.compteVentes || '706';
+        if (apres) add(f.date, 'VT', piece, 'Facture ' + (f.tiers || ''), [{ c: '411', m: c.ttc - c.cee }, { c: '467', m: c.cee }, { c: cpt, m: -c.ht }, { c: '44574', m: -c.tva }], 'facture:' + f.id, f.tiers);
+        var paiements = (f.encaissements || []).slice();
+        if (c.cee && f.ceeRecue) paiements.push({ date: f.ceeRecue, montant: c.cee, origine: opsCee[f.id] ? 'banque' : '', mode: 'Prime CEE', cee: true });
+        paiements.forEach(function (e) {
+          if (!e.date || e.date < dMin) return;
+          var m = n(e.montant), tc = compteTreso(e), part = c.ttc && apres ? m * c.tva / c.ttc : 0;
+          add(e.date, tc === '512' ? 'BQ' : 'OD', piece, (e.cee ? 'Prime CEE ' : 'Encaissement ') + (f.tiers || ''), [{ c: tc, m: m }, { c: e.cee ? '467' : '411', m: -m }, { c: '44574', m: part }, { c: '44571', m: -part }], 'encaissement:' + f.id, f.tiers);
+        });
+      } else {
+        var immo = f.nature === 'immo' || /^2/.test(f.compte || ''), pct = f.pctTva === '' || f.pctTva == null ? 1 : n(f.pctTva) / 100;
+        var recup = c.tva * pct, cptA = f.compte || (immo ? '2154' : '6068');
+        if (immo && !/^2/.test(cptA)) cptA = '2154';
+        var tvaCpt = immo ? '44562' : f.nature === 'service' ? '44568' : '44566', fourn = immo ? '404' : '401';
+        if (apres) {
+          var l = [{ c: cptA, m: c.ht + c.tva - recup }, { c: tvaCpt, m: recup }, { c: fourn, m: -c.ttc }];
+          if (f.autoliq === 'oui') { var al = r2(c.ht * 0.2); l.push({ c: '44566', m: al }, { c: '44571', m: -al }); }   // autoliquidation : TVA due et déductible
+          add(f.date, 'AC', piece, 'Facture ' + (f.tiers || ''), l, 'facture:' + f.id, f.tiers);
+        }
+        (f.encaissements || []).forEach(function (e) {
+          if (!e.date || e.date < dMin) return;
+          var m = n(e.montant), tc = compteTreso(e), part = apres && f.nature === 'service' && !immo && c.ttc ? m * recup / c.ttc : 0;
+          add(e.date, tc === '512' ? 'BQ' : 'OD', piece, 'Règlement ' + (f.tiers || ''), [{ c: fourn, m: m }, { c: tc, m: -m }, { c: '44566', m: part }, { c: '44568', m: -part }], 'reglement:' + f.id, f.tiers);
+        });
+      }
+    });
+    // 2) opérations bancaires qui ne sont pas reliées à une facture
+    (D.ops || []).forEach(function (o) {
+      if (o.factureId && parId[o.factureId]) return;
+      if (!o.date || o.date < dMin) return;
+      var m = n(o.montant);
+      add(o.date, 'BQ', o.id, o.libelle, [{ c: '512', m: m }, { c: o.compte || '471', m: -m }], 'banque:' + o.id);
+    });
+    // 3) écritures diverses (IK, salaires, intérêts d'emprunt, IS…)
+    (D.ods || []).forEach(function (o) {
+      if (!o.date || !o.debit || !o.credit) return;
+      var m = n(o.montant);
+      add(o.date, 'OD', o.id, o.libelle || o.type, [{ c: o.debit, m: m }, { c: o.credit, m: -m }], 'od:' + o.id);
+    });
+    // 4) fin de chaque exercice : amortissements, stocks
+    var dates = out.map(function (e) { return e.date; }).concat((D.immos || []).map(function (i) { return i.dateAcq; })).filter(Boolean).sort();
+    var a0 = dates.length ? +dates[0].slice(0, 4) : new Date().getFullYear(), a1 = Math.max(new Date().getFullYear(), dates.length ? +dates[dates.length - 1].slice(0, 4) : 0) + 1;
+    var stockPrec = (ouv.lignes || []).filter(function (x) { return /^3/.test(x.compte); }).reduce(function (s, x) { return s + n(x.debit) - n(x.credit); }, 0);
+    var stocks = prm.stocks || {};
+    for (var a = a0; a <= a1; a++) {
+      var ex = exercice(a, prm);
+      if (ex.au < dMin) continue;
+      (D.immos || []).forEach(function (im) {
+        var debut = ex.du < dMin ? jour(dMin, -1) : jour(ex.du, -1);
+        var dot = r2(cumulAmort(im, ex.au) - cumulAmort(im, debut));
+        var c2 = String(im.compte || '2154'), c28 = '28' + c2.slice(1);
+        if (dot > 0) add(ex.au, 'OD', 'AMORT-' + a, 'Dotation aux amortissements : ' + (im.libelle || c2), [{ c: '6811', m: dot }, { c: c28, m: -dot }], 'amort:' + im.id);
+        if (im.dateCession && dans(im.dateCession, ex.du, ex.au) && im.dateCession >= dMin) {
+          var cum = r2(cumulAmort(im, im.dateCession));
+          add(im.dateCession, 'OD', 'CESSION', 'Sortie du bilan : ' + (im.libelle || c2), [{ c: c28, m: cum }, { c: '675', m: n(im.valeur) - cum }, { c: c2, m: -n(im.valeur) }], 'cession:' + im.id);
+        }
+      });
+      if (stocks[ex.annee] !== undefined && stocks[ex.annee] !== '') {
+        var fin = n(stocks[ex.annee]), v = r2(fin - stockPrec);
+        if (v) add(ex.au, 'OD', 'STOCK-' + a, 'Variation du stock de matériaux', [{ c: '31', m: v }, { c: '6031', m: -v }], 'stock:' + a);
+        stockPrec = fin;
+      }
+    }
+    out.sort(function (x, y) { return x.date < y.date ? -1 : x.date > y.date ? 1 : 0; });
+    return out;
+  }
+  /** Amortissements cumulés d'une immobilisation à une date (linéaire, au prorata des jours). */
+  function cumulAmort(im, date) {
+    var v = n(im.valeur), d = n(im.duree);
+    if (!v || !d || !im.dateAcq || date < im.dateAcq) return 0;
+    var fin = im.dateCession && im.dateCession < date ? im.dateCession : date;
+    return Math.min(v, v / d * (jours(im.dateAcq, fin) + 1) / 365);
+  }
+
+  /** Soldes par compte : classes 1 à 5 cumulées jusqu'à « au », classes 6 et 7 entre « du » et « au ». */
+  function soldes(ecr, du, au) {
+    var bil = {}, res = {}, avant = 0;
+    ecr.forEach(function (e) {
+      if (e.date > au) return;
+      e.l.forEach(function (x) {
+        if (/^[67]/.test(x.c)) { if (e.date >= du) res[x.c] = (res[x.c] || 0) + x.m; else avant += x.m; }
+        else bil[x.c] = (bil[x.c] || 0) + x.m;
+      });
+    });
+    return { bilan: bil, resultat: res, resultatsAnterieurs: -avant };
+  }
+
+  /* ---------- Compte de résultat (présentation 2033-B) ---------- */
+  var CR = [
+    ['210', 'Ventes de marchandises', 'P', ['707', '7097']], ['214', 'Production vendue : biens', 'P', ['701', '702', '703']],
+    ['218', 'Production vendue : services (travaux, prestations)', 'P', ['704', '705', '706', '708']], ['222', 'Production stockée', 'P', ['713']],
+    ['224', 'Production immobilisée', 'P', ['72']], ['226', 'Subventions d\'exploitation reçues', 'P', ['74']], ['230', 'Autres produits', 'P', ['75', '781', '791']],
+    ['234', 'Achats de marchandises', 'C', ['607', '6097']], ['236', 'Variation de stock (marchandises)', 'C', ['6037']],
+    ['238', 'Achats de matières premières et autres approvisionnements', 'C', ['601', '602', '6091', '6092']], ['240', 'Variation de stock (matières premières et approvisionnements)', 'C', ['6031', '6032']],
+    ['242', 'Autres achats et charges externes', 'C', ['604', '605', '606', '6094', '6095', '6096', '6098', '61', '62']], ['244', 'Impôts, taxes et versements assimilés', 'C', ['63']],
+    ['250', 'Rémunérations du personnel', 'C', ['641', '644']], ['252', 'Charges sociales', 'C', ['645', '646', '647', '648']],
+    ['254', 'Dotations aux amortissements', 'C', ['6811', '6812']], ['256', 'Dotations aux provisions', 'C', ['6815', '6816', '6817']], ['262', 'Autres charges', 'C', ['65']],
+    ['280', 'Produits financiers', 'PF', ['76', '786', '796']], ['290', 'Produits exceptionnels', 'PE', ['77', '787', '797']],
+    ['294', 'Charges financières', 'CF', ['66', '686']], ['300', 'Charges exceptionnelles', 'CE', ['67', '687']], ['306', 'Impôt sur les bénéfices', 'IS', ['69']]
+  ];
+  function rubriqueCR(c) {
+    var best = null, lg = 0;
+    CR.forEach(function (r) { r[3].forEach(function (p) { if (c.indexOf(p) === 0 && p.length > lg) { best = r; lg = p.length; } }); });
+    return best || (/^6/.test(c) ? CR[17] : CR[6]);   // par défaut : autres charges / autres produits
+  }
+  function compteResultat(ecr, ex) {
+    var s = soldes(ecr, ex.du, ex.au), L = {};
+    CR.forEach(function (r) { L[r[0]] = { code: r[0], lib: r[1], type: r[2], montant: 0, comptes: {} }; });
+    Object.keys(s.resultat).forEach(function (c) {
+      var r = rubriqueCR(c), v = s.resultat[c], x = L[r[0]];
+      var m = /^P/.test(r[2]) ? -v : v;   // produits au crédit, charges au débit
+      x.montant += m; x.comptes[c] = (x.comptes[c] || 0) + m;
+    });
+    var som = function (t) { return CR.filter(function (r) { return r[2] === t; }).reduce(function (a, r) { return a + L[r[0]].montant; }, 0); };
+    var pe = som('P'), ce = som('C'), re = pe - ce;
+    var res = re + som('PF') + som('PE') - som('CF') - som('CE') - som('IS');
+    return { lignes: CR.map(function (r) { return L[r[0]]; }), produitsExploitation: r2(pe), chargesExploitation: r2(ce), resultatExploitation: r2(re), resultat: r2(res), comptes: s.resultat };
+  }
+
+  /* ---------- Bilan (présentation 2033-A) ---------- */
+  function bilan(ecr, ex) {
+    var s = soldes(ecr, ex.du, ex.au), cr = compteResultat(ecr, ex);
+    var A = {}, P = {}, det = {};
+    var mettre = function (cote, cle, c, v) { var o = cote === 'A' ? A : P; o[cle] = (o[cle] || 0) + v; det[cle] = det[cle] || {}; det[cle][c] = (det[cle][c] || 0) + v; };
+    var tva = 0, brut = {}, amort = {};
+    Object.keys(s.bilan).forEach(function (c) {
+      var v = s.bilan[c];
+      if (Math.abs(v) < 0.005) return;
+      if (/^28/.test(c)) { var k2 = /^280[67]/.test(c) ? 'fonds' : /^280/.test(c) ? 'incorp' : /^281/.test(c) ? 'corp' : 'fin'; amort[k2] = (amort[k2] || 0) - v; det['am_' + k2] = det['am_' + k2] || {}; det['am_' + k2][c] = -v; return; }
+      if (/^2/.test(c)) { var k = /^20[67]/.test(c) ? 'fonds' : /^20/.test(c) ? 'incorp' : /^2[123]/.test(c) ? 'corp' : 'fin'; brut[k] = (brut[k] || 0) + v; det['br_' + k] = det['br_' + k] || {}; det['br_' + k][c] = v; return; }
+      if (/^445/.test(c)) { tva += v; return; }
+      if (/^101|^108/.test(c)) return mettre('P', 'capital', c, -v);
+      if (/^1061/.test(c)) return mettre('P', 'reserveLegale', c, -v);
+      if (/^106/.test(c)) return mettre('P', 'autresReserves', c, -v);
+      if (/^1[12]/.test(c)) return mettre('P', 'report', c, -v);
+      if (/^1[3-5]/.test(c)) return mettre('P', 'provisions', c, -v);
+      if (/^16/.test(c)) return mettre('P', 'emprunts', c, -v);
+      if (/^3[1-6]/.test(c)) return mettre('A', 'stocksMat', c, v);
+      if (/^3[78]/.test(c)) return mettre('A', 'stocksMarch', c, v);
+      if (/^4091/.test(c)) return v > 0 ? mettre('A', 'avancesVersees', c, v) : mettre('P', 'fournisseurs', c, -v);
+      if (/^41/.test(c)) return v > 0 ? mettre('A', 'clients', c, v) : mettre('P', 'avancesRecues', c, -v);
+      if (/^40/.test(c)) return v < 0 ? mettre('P', 'fournisseurs', c, -v) : mettre('A', 'avancesVersees', c, v);
+      if (/^4[234]/.test(c)) return v < 0 ? mettre('P', 'dettesFiscales', c, -v) : mettre('A', 'autresCreances', c, v);
+      if (/^486/.test(c)) return mettre('A', 'cca', c, v);
+      if (/^487/.test(c)) return mettre('P', 'pca', c, -v);
+      if (/^471/.test(c)) return v > 0 ? mettre('A', 'attente', c, v) : mettre('P', 'attente', c, -v);
+      if (/^4/.test(c)) return v > 0 ? mettre('A', 'autresCreances', c, v) : mettre('P', 'autresDettes', c, -v);
+      if (/^50/.test(c)) return mettre('A', 'vmp', c, v);
+      if (/^5/.test(c)) return v > 0 ? mettre('A', 'dispo', c, v) : mettre('P', 'emprunts', c, -v);   // banque à découvert : dette
+      mettre(v > 0 ? 'A' : 'P', 'attente', c, Math.abs(v));
+    });
+    if (tva > 0.005) mettre('A', 'autresCreances', '445', tva); else if (tva < -0.005) mettre('P', 'dettesFiscales', '445', -tva);
+    if (Math.abs(s.resultatsAnterieurs) >= 0.005) mettre('P', 'report', '(résultats des exercices précédents)', s.resultatsAnterieurs);
+    P.resultat = cr.resultat; det.resultat = { '(exercice)': cr.resultat };
+    var immo = function (code, codeAm, lib, k) { var b = r2(brut[k] || 0), am = r2(amort[k] || 0); return { code: code, codeAm: codeAm, lib: lib, brut: b, amort: am, net: r2(b - am), comptes: Object.assign({}, det['br_' + k] || {}, det['am_' + k] || {}) }; };
+    var lig = function (code, lib, cle, o) { return { code: code, lib: lib, brut: r2(o[cle] || 0), amort: 0, net: r2(o[cle] || 0), comptes: det[cle] || {}, cle: cle }; };
+    var actif = [
+      immo('010', '012', 'Fonds commercial', 'fonds'), immo('014', '016', 'Autres immobilisations incorporelles', 'incorp'),
+      immo('028', '030', 'Immobilisations corporelles', 'corp'), immo('040', '042', 'Immobilisations financières', 'fin'),
+      lig('050', 'Stocks de matières premières et approvisionnements', 'stocksMat', A), lig('060', 'Stocks de marchandises', 'stocksMarch', A),
+      lig('064', 'Avances et acomptes versés sur commandes', 'avancesVersees', A), lig('068', 'Clients et comptes rattachés', 'clients', A),
+      lig('072', 'Autres créances (TVA à récupérer, prime CEE à recevoir…)', 'autresCreances', A), lig('080', 'Valeurs mobilières de placement', 'vmp', A),
+      lig('084', 'Disponibilités (banque, caisse)', 'dispo', A), lig('092', 'Charges constatées d\'avance', 'cca', A)
+    ];
+    if (A.attente) actif.push(lig('', 'Compte d\'attente : opérations à classer', 'attente', A));
+    var passif = [
+      lig('120', 'Capital social ou individuel', 'capital', P), lig('126', 'Réserve légale', 'reserveLegale', P), lig('132', 'Autres réserves', 'autresReserves', P),
+      lig('134', 'Report à nouveau', 'report', P), lig('136', 'Résultat de l\'exercice (bénéfice ou perte)', 'resultat', P), lig('140', 'Provisions', 'provisions', P),
+      lig('156', 'Emprunts et dettes assimilées', 'emprunts', P), lig('164', 'Avances et acomptes reçus sur commandes', 'avancesRecues', P),
+      lig('166', 'Fournisseurs et comptes rattachés', 'fournisseurs', P), lig('', 'Dettes fiscales et sociales (TVA, URSSAF, impôts)', 'dettesFiscales', P),
+      lig('', 'Autres dettes (dont compte courant du dirigeant)', 'autresDettes', P), lig('174', 'Produits constatés d\'avance', 'pca', P)
+    ];
+    if (P.attente) passif.push(lig('', 'Compte d\'attente : opérations à classer', 'attente', P));
+    var tA = r2(actif.reduce(function (t, x) { return t + x.net; }, 0)), tP = r2(passif.reduce(function (t, x) { return t + x.net; }, 0));
+    var capitauxPropres = r2(passif.slice(0, 6).reduce(function (t, x) { return t + x.net; }, 0));
+    return { actif: actif, passif: passif, totalActif: tA, totalPassif: tP, ecart: r2(tA - tP), capitauxPropres: capitauxPropres, resultat: cr.resultat, attente: r2((A.attente || 0) - (P.attente || 0)), tresorerie: r2((s.bilan['512'] || 0) + (s.bilan['53'] || 0)) };
+  }
+
+  /* ---------- TVA sur les encaissements ---------- */
+  var LIGNE_TAUX = { '20': '08', '5.5': '09', '10': '9B', '8.5': '10', '2.1': '11' };
+  /** TVA d'une période : collectée sur les encaissements vus sur les relevés, déductible (biens à la facture, services au paiement). */
+  function tvaPeriode(D, du, au) {
+    var R = { taux: {}, e2: 0, a2: 0, d19: 0, d20: 0, aValider: [], detailsCollecte: [], detailsDeduc: [], autoliqTva: 0 };
+    var opsCee = {}; (D.ops || []).forEach(function (o) { if (o.factureId && o.nature === 'cee') opsCee[o.factureId] = 1; });
+    var tx = function (k) { k = String(n(k)); return R.taux[k] = R.taux[k] || { base: 0, tva: 0 }; };
+    (D.factures || []).forEach(function (f) {
+      var c = chiffres(f);
+      if (f.sens === 'vente') {
+        var p = (f.encaissements || []).slice();
+        if (c.cee && f.ceeRecue) p.push({ date: f.ceeRecue, montant: c.cee, origine: opsCee[f.id] ? 'banque' : '', mode: 'Prime CEE' });
+        p.forEach(function (e) {
+          if (!dans(e.date, du, au) || !c.ttc) return;
+          var m = n(e.montant);
+          if (!confirme(e)) { R.aValider.push({ f: f, e: e, sens: 'vente' }); return; }
+          R.detailsCollecte.push({ f: f, e: e });
+          if (sansTva(f)) { R.e2 += m * c.ht / c.ttc; return; }
+          (f.lignesTva || []).forEach(function (x) { if (!n(x.taux)) { R.e2 += m * n(x.base) / c.ttc; return; } var t = tx(x.taux); t.base += m * n(x.base) / c.ttc; t.tva += m * n(x.montant) / c.ttc; });
+        });
+      } else {
+        var immo = f.nature === 'immo' || /^2/.test(f.compte || ''), pct = f.pctTva === '' || f.pctTva == null ? 1 : n(f.pctTva) / 100, recup = c.tva * pct;
+        if (f.autoliq === 'oui') {   // sous-traitance du bâtiment : TVA autoliquidée au paiement (due et déductible)
+          (f.encaissements || []).forEach(function (e) {
+            if (!dans(e.date, du, au) || !c.ttc) return;
+            if (!confirme(e)) { R.aValider.push({ f: f, e: e, sens: 'achat' }); return; }
+            var b = n(e.montant) * c.ht / c.ttc; R.a2 += b; var t = tx(20); t.base += b; t.tva += b * 0.2; R.autoliqTva += b * 0.2; R.d20 += b * 0.2;
+            R.detailsDeduc.push({ f: f, e: e, montant: b * 0.2, ligne: '20' });
+          });
+          return;
+        }
+        if (!recup) return;
+        if (f.nature !== 'service' || immo) {
+          if (!dans(f.date, du, au)) return;
+          if (immo) R.d19 += recup; else R.d20 += recup;
+          R.detailsDeduc.push({ f: f, montant: recup, ligne: immo ? '19' : '20' });
+        } else (f.encaissements || []).forEach(function (e) {
+          if (!dans(e.date, du, au) || !c.ttc) return;
+          if (!confirme(e)) { R.aValider.push({ f: f, e: e, sens: 'achat' }); return; }
+          var part = n(e.montant) * recup / c.ttc; R.d20 += part; R.detailsDeduc.push({ f: f, e: e, montant: part, ligne: '20' });
+        });
+      }
+    });
+    Object.keys(R.taux).forEach(function (k) { R.taux[k].base = r2(R.taux[k].base); R.taux[k].tva = r2(R.taux[k].tva); });
+    ['e2', 'a2', 'd19', 'd20', 'autoliqTva'].forEach(function (k) { R[k] = r2(R[k]); });
+    R.brute = r2(Object.keys(R.taux).reduce(function (s, k) { return s + R.taux[k].tva; }, 0));
+    R.a1 = r2(Object.keys(R.taux).reduce(function (s, k) { return s + R.taux[k].base; }, 0) - R.a2);
+    return R;
+  }
+  /** Découpage de l'année selon le régime : CA3 mensuelle, trimestrielle, ou CA12 annuelle. */
+  function periodes(regime, annee, prm) {
+    annee = String(annee);
+    var z = function (k) { return ('0' + k).slice(-2); };
+    if (regime === 'CA12') { var ex = exercice(annee, prm); return [{ cle: annee, lib: 'Exercice ' + annee, du: ex.du, au: ex.au }]; }
+    var o = [];
+    if (regime === 'CA3T') for (var t = 1; t <= 4; t++) o.push({ cle: annee + '-T' + t, lib: t + (t === 1 ? 'er' : 'e') + ' trimestre ' + annee, du: annee + '-' + z(3 * t - 2) + '-01', au: jour((t === 4 ? (+annee + 1) + '-01' : annee + '-' + z(3 * t + 1)) + '-01', -1) });
+    else for (var m = 1; m <= 12; m++) o.push({ cle: annee + '-' + z(m), lib: new Date(Date.UTC(+annee, m - 1, 15)).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' }), du: annee + '-' + z(m) + '-01', au: jour((m === 12 ? (+annee + 1) + '-01' : annee + '-' + z(m + 1)) + '-01', -1) });
+    return o;
+  }
+  /** Déclaration d'une période, avec le crédit de TVA reporté des périodes précédentes (calculé depuis la première donnée). */
+  function declaration(D, prm, per) {
+    var soc = (prm && prm.societe) || {}, regime = soc.regimeTva || 'CA3M';
+    var dates = (D.factures || []).map(function (f) { return f.date; }).filter(Boolean).sort();
+    var credit = n(soc.creditTva), debutCredit = soc.creditTvaDate || '';
+    if (dates.length) {
+      for (var a = +dates[0].slice(0, 4); a <= +per.du.slice(0, 4); a++) {
+        periodes(regime, a, prm).forEach(function (p) {
+          if (p.au >= per.du || (debutCredit && p.au < debutCredit)) return;
+          var t = tvaPeriode(D, p.du, p.au), net = t.brute - t.d19 - t.d20 - credit;
+          credit = net < 0 ? r2(-net) : 0;
+        });
+      }
+    }
+    var T = tvaPeriode(D, per.du, per.au);
+    T.l22 = r2(credit); T.l23 = r2(T.d19 + T.d20 + T.l22); T.l16 = T.brute;
+    var net = r2(T.l16 - T.l23);
+    T.l25 = net < 0 ? -net : 0; T.l28 = net > 0 ? net : 0; T.regime = regime;
+    T.lignes = [];
+    Object.keys(T.taux).sort(function (x, y) { return y - x; }).forEach(function (k) { T.lignes.push({ code: LIGNE_TAUX[k] || '13', lib: 'Taux ' + String(k).replace('.', ',') + ' %', base: T.taux[k].base, tva: T.taux[k].tva }); });
+    return T;
+  }
+  /** Acomptes CA12 (régime simplifié) : 55 % en juillet et 40 % en décembre de la TVA nette due l'année précédente (pas d'acompte sous 1 000 €). */
+  function acomptesCa12(D, prm, annee) {
+    var ex = exercice(+annee - 1, prm), d = declaration(D, prm, { du: ex.du, au: ex.au });
+    var base = r2(d.brute - d.d20 - d.l22);   // la TVA sur les immobilisations n'entre pas dans la base des acomptes
+    if (base < 1000) return { base: Math.max(0, base), juillet: 0, decembre: 0 };
+    return { base: base, juillet: r2(base * 0.55), decembre: r2(base * 0.40) };
+  }
+
+  /* ---------- Fichier des écritures (format FEC, pour l'import chez l'expert-comptable) ---------- */
+  function fec(ecr, ex, prm) {
+    var s = soldes(ecr, ex.du, jour(ex.du, -1)), an = [];
+    Object.keys(s.bilan).sort().forEach(function (c) { if (Math.abs(s.bilan[c]) >= 0.005) an.push({ c: c, m: s.bilan[c] }); });
+    if (Math.abs(s.resultatsAnterieurs) >= 0.005) an.push({ c: '110', m: -s.resultatsAnterieurs });
+    var lst = [];
+    if (an.length) lst.push({ date: ex.du, j: 'AN', piece: 'AN' + ex.annee, lib: 'À nouveaux', l: an });
+    ecr.forEach(function (e) { if (dans(e.date, ex.du, ex.au)) lst.push(e); });
+    var JL = { AN: 'A nouveaux', VT: 'Ventes', AC: 'Achats', BQ: 'Banque', OD: 'Operations diverses' };
+    var num = {}, d8 = function (d) { return d.replace(/-/g, ''); }, m = function (v) { return v ? r2(v).toFixed(2).replace('.', ',') : '0,00'; };
+    var cl = function (t) { return String(t == null ? '' : t).replace(/[\t\r\n|]/g, ' '); };
+    var t = ['JournalCode', 'JournalLib', 'EcritureNum', 'EcritureDate', 'CompteNum', 'CompteLib', 'CompAuxNum', 'CompAuxLib', 'PieceRef', 'PieceDate', 'EcritureLib', 'Debit', 'Credit', 'EcritureLet', 'DateLet', 'ValidDate', 'Montantdevise', 'Idevise'].join('\t');
+    lst.forEach(function (e) {
+      num[e.j] = (num[e.j] || 0) + 1;
+      var no = e.j + String(num[e.j]).padStart(6, '0');
+      e.l.forEach(function (x) {
+        var aux = /^(411|401|404)/.test(x.c) && e.tiers ? tiersCode(e.tiers) : '';
+        t += '\r\n' + [e.j, JL[e.j] || e.j, no, d8(e.date), (x.c + '00000000').slice(0, Math.max(8, x.c.length)), cl(libelle(x.c)), aux, aux ? cl(e.tiers) : '', cl(e.piece), d8(e.date), cl(e.lib), m(x.m > 0 ? x.m : 0), m(x.m < 0 ? -x.m : 0), '', '', '', '', ''].join('\t');
+      });
+    });
+    return t;
+  }
+
+  return { PLAN: PLAN, libelle: libelle, DUREES: DUREES, n: n, r2: r2, jour: jour, exercice: exercice, chiffres: chiffres, compteTreso: compteTreso, confirme: confirme,
+    classerOperation: classerOperation, ecritures: ecritures, soldes: soldes, compteResultat: compteResultat, bilan: bilan, cumulAmort: cumulAmort,
+    tvaPeriode: tvaPeriode, periodes: periodes, declaration: declaration, acomptesCa12: acomptesCa12, fec: fec, CR: CR };
+})();
+/* @@MOTEUR-FIN */
+
+/* ---------- Tableaux (CSV, Excel) : factures et relevés exportés d'un logiciel ou de la banque ---------- */
+var XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+var xlsxPret = null;
+function chargerScript(url, nomGlobal) {
+  return new Promise(function (ok, ko) {
+    if (window[nomGlobal]) return ok(window[nomGlobal]);
+    var s = document.createElement('script'); s.src = url;
+    s.onload = function () { ok(window[nomGlobal]); };
+    s.onerror = function () { ko(new Error('Bibliothèque indisponible (connexion internet ?)')); };
+    document.head.appendChild(s);
+  });
+}
+function estTableau(f) { return /\.(csv|txt|tsv|xlsx|xls|ods)$/i.test(f.name) || /csv|spreadsheet|excel|opendocument/.test(f.type || ''); }
+/** Lignes d'un fichier CSV ou Excel : tableau de tableaux (texte). */
+function lireTableau(file) {
+  if (/\.(xlsx|xls|ods)$/i.test(file.name) || /spreadsheet|excel|opendocument/.test(file.type || '')) {
+    if (!xlsxPret) xlsxPret = chargerScript(XLSX_URL, 'XLSX');
+    return xlsxPret.then(function (X) {
+      return new Promise(function (ok) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.readAsArrayBuffer(file); }).then(function (buf) {
+        var wb = X.read(buf, { type: 'array', cellDates: true });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        return X.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'dd/mm/yyyy', defval: '' }).map(function (l) { return l.map(function (c) { return c instanceof Date ? isoJour(c) : String(c == null ? '' : c).trim(); }); });
+      });
+    });
+  }
+  return new Promise(function (ok) {
+    var r = new FileReader();
+    r.onload = function () {
+      var t = String(r.result || '');
+      if (/�/.test(t.slice(0, 2000))) { var r2 = new FileReader(); r2.onload = function () { ok(decouperCsv(String(r2.result))); }; r2.readAsText(file, 'windows-1252'); return; }
+      ok(decouperCsv(t));
+    };
+    r.readAsText(file, 'utf-8');
+  });
+}
+function decouperCsv(t) {
+  t = t.replace(/^﻿/, '');
+  var premiere = t.split(/\r?\n/)[0] || '';
+  var sep = [';', '\t', ','].sort(function (a, b) { return premiere.split(b).length - premiere.split(a).length; })[0];
+  var lignes = [], l = [], c = '', q = false;
+  for (var i = 0; i < t.length; i++) {
+    var ch = t.charAt(i);
+    if (q) { if (ch === '"') { if (t.charAt(i + 1) === '"') { c += '"'; i++; } else q = false; } else c += ch; continue; }
+    if (ch === '"') q = true;
+    else if (ch === sep) { l.push(c.trim()); c = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && t.charAt(i + 1) === '\n') i++; l.push(c.trim()); c = ''; if (l.some(String)) lignes.push(l); l = []; }
+    else c += ch;
+  }
+  l.push(c.trim()); if (l.some(String)) lignes.push(l);
+  return lignes;
+}
+/** Champs reconnus dans les en-têtes de colonnes. */
+var CHAMPS_FACTURE = [
+  ['date', 'Date de la facture', /^(date( de)?( la)? ?(facture|facturation|emission|piece|document)?|date)$/],
+  ['numero', 'Numéro', /(numero|^n (de )?(la )?(facture|piece|doc)|^no\b|^n$|^num|ref(erence)?( facture)?$|piece)/],
+  ['tiers', 'Client / fournisseur', /(client|fournisseur|tiers|raison sociale|^nom|societe|destinataire|beneficiaire)/],
+  ['ht', 'Montant HT', /(\bht\b|hors tax|montant net)/],
+  ['tva', 'Montant de TVA', /^(montant )?(de )?(la )?tva( totale| total)?$|^total tva|taxe$/],
+  ['ttc', 'Montant TTC', /(ttc|toutes taxes|total$|montant total|^montant$|net a payer)/],
+  ['taux', 'Taux de TVA', /(taux|% ?tva)/],
+  ['echeance', 'Échéance', /(echeance|date limite)/],
+  ['datePaiement', 'Date de paiement', /(date (de )?(paiement|reglement|encaissement)|paye le|regle le)/],
+  ['paye', 'Montant payé', /(montant (paye|regle|encaisse)|deja paye|paye$)/],
+  ['cee', 'Prime CEE', /(cee|prime)/],
+  ['sens', 'Vente / achat', /^(type|sens|nature|categorie)$/],
+  ['libelle', 'Libellé / objet', /(objet|libelle|designation|description|intitule)/]
+];
+var CHAMPS_RELEVE = [
+  ['date', 'Date de l\'opération', /^(date( (d.)?(operation|comptable|op))?|date)$/],
+  ['dateValeur', 'Date de valeur', /valeur/],
+  ['libelle', 'Libellé', /(libelle|description|intitule|detail|operation$|nature)/],
+  ['debit', 'Débit', /(debit|sortie|depense)/],
+  ['credit', 'Crédit', /(credit|entree|recette)/],
+  ['montant', 'Montant (+ / −)', /^(montant|somme|valeur)( (en )?eur(os)?)?$/]
+];
+function devinerColonnes(entetes, champs) {
+  var o = {}, pris = {};
+  champs.forEach(function (ch) {
+    for (var i = 0; i < entetes.length; i++) {
+      var h = normC(entetes[i]).replace(/\s+/g, ' ').trim();
+      if (!pris[i] && h && ch[2].test(h)) { o[ch[0]] = i; pris[i] = 1; break; }
+    }
+  });
+  return o;
+}
+/** Fenêtre de correspondance des colonnes : l'outil propose, la personne confirme. Résout avec la liste d'objets. */
+function choisirColonnes(lignes, champs, titre, extra) {
+  return new Promise(function (ok, ko) {
+    var debut = 0;
+    for (var k = 0; k < Math.min(lignes.length, 15); k++) { var g = devinerColonnes(lignes[k], champs); if (Object.keys(g).length >= 2) { debut = k; break; } }
+    var entetes = lignes[debut], corps = lignes.slice(debut + 1), devine = devinerColonnes(entetes, champs);
+    var m = modale(titre, '<p class="small" style="margin:0">' + corps.length + ' ligne(s) trouvée(s). Vérifiez à quelle colonne correspond chaque information.</p>' + (extra || '') +
+      '<div class="fgrid">' + champs.map(function (ch) {
+        return '<label class="f">' + esc(ch[1]) + '<select data-ch="' + ch[0] + '"><option value="">—</option>' + entetes.map(function (h, i) { return '<option value="' + i + '"' + (devine[ch[0]] === i ? ' selected' : '') + '>' + esc(h || ('Colonne ' + (i + 1))) + '</option>'; }).join('') + '</select></label>';
+      }).join('') + '</div><div class="tablewrap" style="max-height:180px"><table><thead><tr>' + entetes.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      corps.slice(0, 4).map(function (l) { return '<tr>' + entetes.map(function (h, i) { return '<td class="small">' + esc(l[i]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
+      '<div class="err" id="ccErr"></div><div class="row"><button class="btn primary" id="ccOk">Importer</button><button class="btn ghost" id="ccX">Annuler</button></div>', true);
+    $('ccX').onclick = function () { m.fermer(); ko(new Error('Import annulé.')); };
+    $('ccOk').onclick = function () {
+      var map = {}; m.querySelectorAll('[data-ch]').forEach(function (s) { if (s.value !== '') map[s.dataset.ch] = +s.value; });
+      if (map.date === undefined) { $('ccErr').textContent = 'Indiquez au moins la colonne de la date.'; return; }
+      var opts = {}; m.querySelectorAll('[data-opt]').forEach(function (s) { opts[s.dataset.opt] = s.value; });
+      var res = corps.map(function (l) { var o = {}; Object.keys(map).forEach(function (c) { o[c] = l[map[c]]; }); return o; });
+      m.remove(); ok({ lignes: res, options: opts });
+    };
+  });
+}
+function dateTableau(v) {
+  v = String(v || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  var m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/.exec(v);
+  if (m) { var a = +m[3]; if (a < 100) a += 2000; return a + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2); }
+  if (/^\d{5}$/.test(v)) { var d = new Date(Date.UTC(1899, 11, 30) + (+v) * 864e5); return d.toISOString().slice(0, 10); }   // date Excel en nombre
+  return '';
+}
+function nombreTableau(v) { if (v === '' || v == null) return null; var s = String(v).replace(/[\s  €]/g, ''); if (/,/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); var x = parseFloat(s); return isFinite(x) ? x : null; }
+/** Opérations d'un relevé en tableau → { date, libelle, montant } (+ crédit, − débit). */
+function operationsTableau(lignes) {
+  return lignes.map(function (o) {
+    var d = dateTableau(o.date), m = null;
+    if (o.montant !== undefined && nombreTableau(o.montant) !== null) m = nombreTableau(o.montant);
+    else { var cr = nombreTableau(o.credit), de = nombreTableau(o.debit); if (cr) m = Math.abs(cr); else if (de) m = -Math.abs(de); }
+    return d && m ? { date: d, libelle: String(o.libelle || '').slice(0, 200), montant: Math.round(m * 100) / 100 } : null;
+  }).filter(Boolean);
+}
+function importerTableauFactures(file, sensDefaut) {
+  return lireTableau(file).then(function (lignes) {
+    if (!lignes.length) throw new Error('Fichier vide.');
+    return choisirColonnes(lignes, CHAMPS_FACTURE, 'Importer une liste de factures', '<label class="f" style="max-width:360px">Si la colonne « Vente / achat » est absente, ce sont des<select data-opt="sens"><option value="vente"' + (sensDefaut !== 'achat' ? ' selected' : '') + '>Factures clients (ventes)</option><option value="achat"' + (sensDefaut === 'achat' ? ' selected' : '') + '>Factures fournisseurs (achats)</option></select></label>');
+  }).then(function (r) {
+    return lireFichier(file).then(function (x) {
+      return call('importerFacturesListe', { lignes: r.lignes, sens: r.options.sens, base64: x.base64, nom: x.nom, mimeType: x.mimeType || 'text/csv' });
+    });
+  }).then(function (x) { return x.ajoutes + ' facture(s) à valider' + (x.doublons ? ', ' + x.doublons + ' déjà présente(s)' : '') + (x.ignores ? ', ' + x.ignores + ' ligne(s) sans date ni montant' : ''); });
+}
+function importerTableauReleve(file) {
+  return lireTableau(file).then(function (lignes) {
+    if (!lignes.length) throw new Error('Fichier vide.');
+    return choisirColonnes(lignes, CHAMPS_RELEVE, 'Importer un relevé de compte');
+  }).then(function (r) {
+    var ops = operationsTableau(r.lignes);
+    if (!ops.length) throw new Error('Aucune opération lisible (vérifiez les colonnes Date et Débit / Crédit ou Montant).');
+    return lireFichier(file).then(function (x) { return call('importerReleve', { base64: x.base64, nom: x.nom, mimeType: x.mimeType || 'text/csv', operations: ops }); });
+  }).then(function (x) { return x.ajoutes + ' opération(s) ajoutée(s)' + (x.doublons ? ', ' + x.doublons + ' déjà présente(s)' : ''); });
+}
+
+/* ---------- Données de la comptabilité ---------- */
+var TABLES_COMPTA = ['Factures', 'Banque', 'Immobilisations', 'OD', 'PiecesBilan', 'ComptaParams'];
+function chargerCompta() {
+  return Promise.all(TABLES_COMPTA.map(function (t) { return call('list', { table: t }); })).then(function (rr) {
+    var prm = { societe: {}, ouverture: {}, stocks: {}, _ids: {} };
+    (rr[5] || []).forEach(function (x) { if (x.cle) { prm[x.cle] = x.reglages || {}; prm._ids[x.cle] = x.id; } });
+    if (!prm.societe.regimeTva) prm.societe.regimeTva = 'CA3M';
+    var D = { factures: rr[0] || [], ops: rr[1] || [], immos: rr[2] || [], ods: rr[3] || [], pieces: rr[4] || [], prm: prm };
+    D.factures.sort(function (a, b) { return String(b.date || b.importe).localeCompare(String(a.date || a.importe)); });
+    D.ops.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+    D.ecr = CPT.ecritures(D, prm);
+    return D;
+  });
+}
+function sauverParam(D, cle, valeur) { return call('save', { table: 'ComptaParams', row: { id: D.prm._ids[cle] || '', cle: cle, reglages: valeur } }); }
+function optionsComptes(choisi, filtre) {
+  var groupes = {};
+  CPT.PLAN.forEach(function (p) { if (filtre && !filtre(p[0])) return; (groupes[p[2]] = groupes[p[2]] || []).push(p); });
+  var connu = CPT.PLAN.some(function (p) { return p[0] === choisi; });
+  return (choisi && !connu ? '<option value="' + esc(choisi) + '" selected>' + esc(choisi + ' · ' + CPT.libelle(choisi)) + '</option>' : '') +
+    Object.keys(groupes).map(function (g) { return '<optgroup label="' + esc(g) + '">' + groupes[g].map(function (p) { return '<option value="' + p[0] + '"' + (p[0] === choisi ? ' selected' : '') + '>' + esc(p[0] + ' · ' + p[1]) + '</option>'; }).join('') + '</optgroup>'; }).join('');
+}
+function exerciceDe(P, D) { return CPT.exercice(P.annee === 'tout' ? String(new Date().getFullYear()) : P.annee, D.prm); }
+function libEx(ex) { return ex.du.slice(5) === '01-01' && ex.au.slice(5) === '12-31' ? 'exercice ' + ex.annee : 'exercice du ' + dateFr(ex.du) + ' au ' + dateFr(ex.au); }
+function imprimer(titre, html) {
+  var w = window.open('', '_blank');
+  if (!w) { toast('Autorisez l\'ouverture des fenêtres pour imprimer.'); return; }
+  w.document.write('<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + esc(titre) + '</title><style>body{font:12px/1.4 Arial,sans-serif;margin:24px;color:#222}h1{font-size:18px}h2{font-size:14px;margin-top:18px}table{border-collapse:collapse;width:100%;margin:6px 0}td,th{border:1px solid #bbb;padding:4px 6px;text-align:left}td.n,th.n{text-align:right;white-space:nowrap}tr.t td{font-weight:bold;background:#f2f0ec}.m{color:#666;font-size:11px}</style></head><body>' + html + '<p class="m">Document préparatoire établi par le logiciel, à faire vérifier par l\'expert-comptable. Il ne remplace pas la liasse fiscale.</p><script>window.onload=function(){window.print()}<\/script></body></html>');
+  w.document.close();
+}
+
+/* ---------- Onglet Comptabilité ---------- */
+var COMPTA_ONGLETS = [['bord', 'Tableau de bord'], ['valider', 'À valider'], ['factures', 'Factures'], ['banque', 'Relevés de compte'], ['tva', 'Déclaration de TVA'], ['resultat', 'Compte de résultat'], ['bilan', 'Bilan'], ['immo', 'Immobilisations et écritures'], ['docs', 'Documents du bilan'], ['reglages', 'Réglages']];
 VUES.factures = function () {
-  var mode = S.cache.faMode || 'factures';
+  var mode = S.cache.faMode || 'bord';
+  if (!COMPTA_ONGLETS.some(function (o) { return o[0] === mode; })) mode = 'bord';
   var P = S.cache.faP || (S.cache.faP = { annee: String(new Date().getFullYear()), mois: 'tout', sens: 'tous', statut: 'tous', q: '' });
-  return Promise.all([call('list', { table: 'Factures' }), call('list', { table: 'Banque' })]).then(function (rr) {
-    var factures = rr[0], ops = rr[1];
-    factures.sort(function (a, b) { return String(b.date || b.importe).localeCompare(String(a.date || a.importe)); });
-    ops.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
-    var annees = {}; factures.concat(ops).forEach(function (x) { if (x.date) annees[x.date.slice(0, 4)] = 1; }); annees[String(new Date().getFullYear())] = 1;
+  return chargerCompta().then(function (D) {
+    S.cache.compta = D;
+    var annees = {}; D.factures.concat(D.ops).forEach(function (x) { if (x.date) annees[x.date.slice(0, 4)] = 1; }); annees[String(new Date().getFullYear())] = 1;
     var gestion = peut('factures');
-    var h = '<div class="head"><h2>Factures</h2><span class="meta">Lecture automatique, TVA, encaissements et relevés de compte</span></div>' +
-      '<div class="row" role="group">' + [['factures', 'Factures'], ['banque', 'Relevés de compte'], ['tva', 'TVA et encaissements']].map(function (m) { return '<button class="btn ' + (mode === m[0] ? 'primary' : 'ghost') + ' small" data-fm="' + m[0] + '">' + m[1] + '</button>'; }).join('') + '</div>' +
-      '<div class="card"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">' +
-      '<label class="f">Année<select id="faA"><option value="tout">Toutes</option>' + Object.keys(annees).sort().reverse().map(function (a) { return '<option' + (P.annee === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></label>' +
-      '<label class="f">Période<select id="faM"><option value="tout">Toute l\'année</option>' + ['T1', 'T2', 'T3', 'T4'].map(function (t) { return '<option value="' + t + '"' + (P.mois === t ? ' selected' : '') + '>' + t.slice(1) + 'ᵉ trimestre</option>'; }).join('') + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (m) { return '<option value="' + m + '"' + (P.mois === String(m) ? ' selected' : '') + '>' + new Date(2026, m - 1, 15).toLocaleDateString('fr-FR', { month: 'long' }) + '</option>'; }).join('') + '</select></label>' +
+    var aValider = D.factures.filter(function (f) { return f.verifie !== 'oui'; }).length;
+    var avecPeriode = /^(factures|banque)$/.test(mode), avecAnnee = !/^(reglages|valider)$/.test(mode);
+    var h = '<div class="head"><h2>Comptabilité</h2><span class="meta">Factures, relevés, TVA, résultat et bilan : préparation pour l\'expert-comptable</span></div>' +
+      '<div class="row ctabs" role="tablist" style="gap:6px">' + COMPTA_ONGLETS.map(function (m) { return '<button class="btn ' + (mode === m[0] ? 'primary' : 'ghost') + ' small" data-fm="' + m[0] + '" role="tab" aria-selected="' + (mode === m[0]) + '">' + m[1] + (m[0] === 'valider' && aValider ? ' <span class="pill warn" style="padding:0 7px">' + aValider + '</span>' : '') + '</button>'; }).join('') + '</div>' +
+      (avecAnnee ? '<div class="card"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">' +
+      '<label class="f">' + (avecPeriode ? 'Année' : 'Exercice') + '<select id="faA">' + (avecPeriode ? '<option value="tout">Toutes</option>' : '') + Object.keys(annees).sort().reverse().map(function (a) { return '<option' + (P.annee === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></label>' +
+      (avecPeriode ? '<label class="f">Période<select id="faM"><option value="tout">Toute l\'année</option>' + ['T1', 'T2', 'T3', 'T4'].map(function (t) { return '<option value="' + t + '"' + (P.mois === t ? ' selected' : '') + '>' + t.slice(1) + 'ᵉ trimestre</option>'; }).join('') + [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(function (m) { return '<option value="' + m + '"' + (P.mois === String(m) ? ' selected' : '') + '>' + new Date(2026, m - 1, 15).toLocaleDateString('fr-FR', { month: 'long' }) + '</option>'; }).join('') + '</select></label>' : '') +
       (mode === 'factures' ? '<label class="f">Type<select id="faS"><option value="tous">Ventes et achats</option><option value="vente"' + (P.sens === 'vente' ? ' selected' : '') + '>Ventes (clients)</option><option value="achat"' + (P.sens === 'achat' ? ' selected' : '') + '>Achats (fournisseurs)</option></select></label>' +
-        '<label class="f">État<select id="faE"><option value="tous">Tous</option><option value="attente"' + (P.statut === 'attente' ? ' selected' : '') + '>Reste à encaisser / payer</option><option value="soldée"' + (P.statut === 'soldée' ? ' selected' : '') + '>Soldées</option><option value="verifier"' + (P.statut === 'verifier' ? ' selected' : '') + '>À vérifier</option></select></label>' +
+        '<label class="f">État<select id="faE"><option value="tous">Tous</option><option value="attente"' + (P.statut === 'attente' ? ' selected' : '') + '>Reste à encaisser / payer</option><option value="soldée"' + (P.statut === 'soldée' ? ' selected' : '') + '>Soldées</option><option value="verifier"' + (P.statut === 'verifier' ? ' selected' : '') + '>À valider</option></select></label>' +
         '<label class="f">Rechercher<input id="faQ" type="search" value="' + esc(P.q) + '" placeholder="client, fournisseur, n°…"></label>' : '') +
-      '</div></div><div id="faZone"></div>';
+      '</div></div>' : '') + '<div id="faZone"></div>';
     $('view').innerHTML = h;
+    if (!avecPeriode && P.annee === 'tout') P.annee = String(new Date().getFullYear());
     $('view').querySelectorAll('[data-fm]').forEach(function (b) { b.onclick = function () { S.cache.faMode = b.dataset.fm; ouvrir('factures'); }; });
-    var relancer = function () { P.annee = $('faA').value; P.mois = $('faM').value; if ($('faS')) { P.sens = $('faS').value; P.statut = $('faE').value; P.q = $('faQ').value; } dessiner(); };
+    var relancer = function () { P.annee = $('faA').value; if ($('faM')) P.mois = $('faM').value; if ($('faS')) { P.sens = $('faS').value; P.statut = $('faE').value; P.q = $('faQ').value; } dessiner(); };
     ['faA', 'faM', 'faS', 'faE'].forEach(function (id) { if ($(id)) $(id).onchange = relancer; });
     if ($('faQ')) $('faQ').oninput = relancer;
-    function dessiner() { if (mode === 'banque') vueBanque(ops, factures, P, gestion); else if (mode === 'tva') vueTva(factures, ops, P); else vueListeFactures(factures, P, gestion); }
+    function dessiner() {
+      var V = { bord: vueBord, valider: vueAValider, factures: vueListeFactures, banque: vueBanque, tva: vueTva, resultat: vueResultat, bilan: vueBilan, immo: vueImmos, docs: vueDocsBilan, reglages: vueReglages }[mode];
+      V(D, P, gestion);
+    }
     dessiner();
   });
 };
-function zoneImport(id, titre, aide, accept, options) {
+function zoneImport(id, titre, aide, accept, options, photo) {
   return '<div class="card" id="' + id + '" style="border-style:dashed;border-width:2px"><span class="tag">' + titre + '</span><p class="muted small" style="margin:0">' + aide + '</p>' + (options || '') +
-    '<div class="row"><label class="btn primary upl">Choisir des fichiers<input type="file" multiple accept="' + accept + '"></label><span class="muted small">ou glissez-les ici</span></div><div class="imp small"></div></div>';
+    '<div class="row">' + (photo ? '<label class="btn primary upl">Photographier une facture<input type="file" accept="image/*" capture="environment" data-cam="1"></label>' : '') +
+    '<label class="btn ' + (photo ? 'ghost' : 'primary') + ' upl">Choisir des fichiers<input type="file" multiple accept="' + accept + '"></label><span class="muted small">ou glissez-les ici</span></div><div class="imp small"></div></div>';
 }
 function brancherImport(id, traiter) {
   var z = $(id); if (!z) return;
@@ -2086,57 +2857,136 @@ function brancherImport(id, traiter) {
     });
     s.then(function () { if (fait) setTimeout(function () { ouvrir('factures'); }, 900); });
   };
-  z.querySelector('input[type=file]').onchange = function (e) { lancer(e.target.files); };
+  z.querySelectorAll('input[type=file]').forEach(function (inp) { inp.onchange = function (e) { lancer(e.target.files); }; });
   z.addEventListener('dragover', function (e) { e.preventDefault(); z.style.borderColor = 'var(--gold)'; });
   z.addEventListener('dragleave', function () { z.style.borderColor = ''; });
   z.addEventListener('drop', function (e) { e.preventDefault(); z.style.borderColor = ''; lancer(e.dataTransfer.files); });
 }
 function lireTexte(f) {
   // texte du PDF lu dans le navigateur ; vide pour une photo ou un scan (le serveur fera la reconnaissance de caractères)
-  return lireFichier(f).then(function (x) {
+  return lireFichier(f, /^image\//.test(f.type) ? 2200 : 0).then(function (x) {
     if (!/pdf/.test(x.mimeType)) return { x: x, texte: '', pages: null };
     return lignesPdf(x.base64).then(function (pages) { return { x: x, texte: texteDePages(pages), pages: pages }; }, function () { return { x: x, texte: '', pages: null }; });
   });
 }
-function vueListeFactures(factures, P, gestion) {
+/** Dépôt d'une facture (PDF, photo) ou d'une liste de factures (CSV, Excel). */
+function deposerFacture(file, sens) {
+  if (estTableau(file)) return importerTableauFactures(file, sens);
+  return lireTexte(file).then(function (r) {
+    return call('importerFacture', { base64: r.x.base64, nom: r.x.nom, mimeType: r.x.mimeType, texte: r.texte, sens: sens });
+  }).then(function (f) { return (f.sens === 'vente' ? 'vente' : 'achat') + ' · ' + (f.tiers || 'tiers ?') + ' · ' + (f.ttc ? eur(nb(f.ttc)) + ' TTC' : 'TTC ?') + ' · à valider'; });
+}
+
+/* ---------- Tableau de bord ---------- */
+function vueBord(D, P) {
+  var ex = exerciceDe(P, D), cr = CPT.compteResultat(D.ecr, ex), bi = CPT.bilan(D.ecr, ex);
+  var auj = isoJour(new Date()), dansEx = auj >= ex.du && auj <= ex.au;
+  var bq = CPT.soldes(D.ecr, ex.du, dansEx ? auj : ex.au).bilan;
+  var treso = (bq['512'] || 0);
+  // mois de l'exercice : chiffre d'affaires facturé (HT) et charges (HT, hors amortissements et stocks)
+  var mois = [], k0 = new Date(ex.du + 'T12:00:00');
+  for (var i = 0; i < 12; i++) { var d = new Date(k0.getFullYear(), k0.getMonth() + i, 15); mois.push({ cle: isoJour(d).slice(0, 7), lib: d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', ''), ca: 0, ch: 0, enc: 0 }); }
+  var idx = {}; mois.forEach(function (m, i) { idx[m.cle] = i; });
+  D.ecr.forEach(function (e) {
+    var i = idx[e.date.slice(0, 7)]; if (i === undefined) return;
+    e.l.forEach(function (x) {
+      if (/^7/.test(x.c)) mois[i].ca -= x.m;
+      else if (/^6/.test(x.c) && !/^(681|603)/.test(x.c)) mois[i].ch += x.m;
+      else if (x.c === '512' && e.j === 'BQ' && x.m > 0) mois[i].enc += x.m;
+    });
+  });
+  var regime = D.prm.societe.regimeTva, per = CPT.periodes(regime, auj.slice(0, 4), D.prm).filter(function (p) { return auj >= p.du && auj <= p.au; })[0];
+  var perPrec = null; CPT.periodes(regime, auj.slice(0, 4), D.prm).concat(CPT.periodes(regime, +auj.slice(0, 4) - 1, D.prm)).forEach(function (p) { if (p.au < (per ? per.du : auj) && (!perPrec || p.au > perPrec.au)) perPrec = p; });
+  var tvaPrec = perPrec ? CPT.declaration(D, D.prm, perPrec) : null;
+  var reste = D.factures.filter(function (f) { return f.sens === 'vente'; }).reduce(function (s, f) { return s + nb(f.reste); }, 0);
+  var ceeAtt = D.factures.filter(function (f) { return f.sens === 'vente' && nb(f.cee) && !f.ceeRecue; }).reduce(function (s, f) { return s + nb(f.cee); }, 0);
+  var aValider = D.factures.filter(function (f) { return f.verifie !== 'oui'; }).length;
+  var aClasser = D.ops.filter(function (o) { return !o.factureId && !o.compte; }).length;
+  var tuile = function (tag, val, sous, go) { return '<div class="card"' + (go ? ' style="cursor:pointer" data-go="' + go + '"' : '') + '><span class="tag">' + tag + '</span><b style="font-size:24px">' + val + '</b><span class="muted small">' + sous + '</span></div>'; };
+  var h = '<div class="grid">' +
+    tuile('Chiffre d\'affaires HT · ' + libEx(ex), eur(cr.lignes.filter(function (l) { return /^(210|214|218)$/.test(l.code); }).reduce(function (s, l) { return s + l.montant; }, 0), 0), 'factures émises sur l\'exercice', 'resultat') +
+    tuile('Résultat estimé', '<span style="color:' + (cr.resultat >= 0 ? 'var(--ok)' : 'var(--ko)') + '">' + eur(cr.resultat, 0) + '</span>', 'produits ' + eur(cr.produitsExploitation, 0) + ' − charges ' + eur(cr.chargesExploitation, 0), 'resultat') +
+    tuile('Trésorerie calculée', eur(treso, 0), D.prm.ouverture.date ? 'banque au ' + dateFr(dansEx ? auj : ex.au) + ', d\'après les relevés' : 'saisissez le solde d\'ouverture dans Réglages', 'banque') +
+    tuile(tvaPrec ? 'TVA ' + esc(perPrec.lib) : 'TVA', tvaPrec ? (tvaPrec.l28 ? eur(tvaPrec.l28) + ' à payer' : eur(tvaPrec.l25) + ' de crédit') : '—', tvaPrec && tvaPrec.aValider.length ? tvaPrec.aValider.length + ' paiement(s) à retrouver sur un relevé' : 'calculée sur les encaissements', 'tva') +
+    '</div><div class="grid">' +
+    tuile('À valider', String(aValider), 'facture(s) lue(s) à vérifier', 'valider') + tuile('Opérations bancaires à classer', String(aClasser), 'sans facture ni compte', 'banque') +
+    tuile('Reste à encaisser', eur(reste, 0), ceeAtt ? 'dont primes CEE attendues ' + eur(ceeAtt, 0) : 'factures clients non soldées', 'factures') +
+    tuile('Bilan', bi.ecart ? '<span style="color:var(--ko)">écart ' + eur(bi.ecart) + '</span>' : eur(bi.totalActif, 0), bi.attente ? eur(Math.abs(bi.attente)) + ' en compte d\'attente' : 'total de l\'actif', 'bilan') +
+    '</div>' + graphiqueMois(mois);
+  $('faZone').innerHTML = h;
+  $('faZone').querySelectorAll('[data-go]').forEach(function (c) { c.onclick = function () { S.cache.faMode = c.dataset.go; if (c.dataset.go === 'factures') S.cache.faP.statut = 'attente'; ouvrir('factures'); }; });
+}
+/** Barres groupées par mois : chiffre d'affaires HT et charges HT. Survol : valeurs exactes ; tableau en dessous. */
+function graphiqueMois(mois) {
+  var max = Math.max(1, Math.max.apply(null, mois.map(function (m) { return Math.max(m.ca, m.ch); })));
+  var W = 720, H = 220, g = 34, bas = H - 26, larg = (W - g) / 12, b = Math.max(6, larg / 2 - 7);
+  var pas = Math.pow(10, Math.floor(Math.log10(max))), lim = Math.ceil(max / pas) * pas, y = function (v) { return bas - Math.max(0, v) / lim * (bas - 12); };
+  var grille = [0, 0.5, 1].map(function (k) { var v = lim * k; return '<line x1="' + g + '" x2="' + W + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)" stroke-width="1"/><text x="' + (g - 4) + '" y="' + (y(v) + 4) + '" text-anchor="end" font-size="10" fill="var(--muted)">' + (v >= 1000 ? Math.round(v / 1000) + ' k' : Math.round(v)) + '</text>'; }).join('');
+  var barres = mois.map(function (m, i) {
+    var x = g + i * larg + larg / 2;
+    var bar = function (v, dx, cls, lib) { var hy = y(v); return v > 0 ? '<path class="' + cls + '" d="M' + (x + dx) + ',' + bas + 'V' + (hy + 3) + 'q0,-3 3,-3h' + (b - 6) + 'q3,0 3,3V' + bas + 'z"><title>' + m.lib + ' · ' + lib + ' : ' + eur(v, 0) + '</title></path>' : ''; };
+    return bar(m.ca, -b - 1, 'gs1', 'chiffre d\'affaires HT') + bar(m.ch, 1, 'gs2', 'charges HT') + '<text x="' + x + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="var(--muted)">' + m.lib + '</text>';
+  }).join('');
+  return '<div class="card"><span class="tag">Chaque mois de l\'exercice</span><div class="row small" style="gap:14px"><span><i class="gl gs1"></i>Chiffre d\'affaires HT (factures)</span><span><i class="gl gs2"></i>Charges HT (hors amortissements)</span></div>' +
+    (max <= 1 ? '<div class="empty">Pas encore de factures ni de charges sur cet exercice.</div>' : '<div style="overflow-x:auto"><svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;min-width:560px;height:auto" role="img" aria-label="Chiffre d\'affaires et charges par mois">' + grille + barres + '</svg></div>') +
+    '<details><summary class="small">Voir le tableau</summary><div class="tablewrap"><table><thead><tr><th>Mois</th><th style="text-align:right">Chiffre d\'affaires HT</th><th style="text-align:right">Charges HT</th><th style="text-align:right">Encaissé (banque)</th></tr></thead><tbody>' +
+    mois.map(function (m) { return '<tr><td>' + m.lib + '</td><td style="text-align:right">' + eur(m.ca) + '</td><td style="text-align:right">' + eur(m.ch) + '</td><td style="text-align:right">' + eur(m.enc) + '</td></tr>'; }).join('') + '</tbody></table></div></details></div>';
+}
+
+/* ---------- À valider : factures lues automatiquement, à vérifier une par une ---------- */
+function vueAValider(D, P, gestion) {
+  var l = D.factures.filter(function (f) { return f.verifie !== 'oui'; }).sort(function (a, b) { return String(a.importe).localeCompare(String(b.importe)); });
+  var h = (gestion ? zoneImport('vaImp', 'Envoyer des factures', 'Prenez la facture en photo avec le téléphone, ou déposez des PDF, des photos, ou une liste (CSV, Excel). L\'outil lit le fournisseur ou le client, la date, le numéro, la TVA par taux, les totaux, et propose le compte comptable. Vous n\'avez plus qu\'à vérifier et valider.', 'application/pdf,image/*,.csv,.xlsx,.xls,.ods,text/csv',
+      '<label class="f" style="max-width:320px">Type de facture<select id="vaSens"><option value="">Détection automatique</option><option value="achat">Facture fournisseur (achat)</option><option value="vente">Facture client (vente)</option></select></label>', true) : '') +
+    (l.length ? '<div class="row"><span class="muted small" style="flex:1">' + l.length + ' facture(s) à vérifier</span>' + (gestion ? '<button class="btn primary small" id="vaGo">Vérifier une par une</button>' : '') + '</div>' +
+      '<div class="tablewrap"><table><thead><tr><th>Lue le</th><th>Type</th><th>Client / fournisseur</th><th>Date</th><th style="text-align:right">TTC</th><th>Compte proposé</th><th>Remarques</th></tr></thead><tbody>' +
+      l.map(function (f) {
+        return '<tr class="click" data-fa="' + esc(f.id) + '"><td class="small">' + esc(dateFr(String(f.importe || '').slice(0, 10))) + '</td><td><span class="pill ' + (f.sens === 'vente' ? 'ok' : '') + '">' + (f.sens === 'vente' ? 'Vente' : 'Achat') + '</span></td><td><b>' + esc(f.tiers || '—') + '</b><br><span class="muted small">' + esc(f.numero || f.nomFichier || '') + '</span></td><td class="small">' + esc(dateFr(f.date)) + '</td><td style="text-align:right"><b>' + eur2(f.ttc) + '</b></td><td class="small">' + esc(f.compte ? f.compte + ' · ' + CPT.libelle(f.compte) : '—') + (f.nature === 'immo' ? '<br><span class="pill gold">immobilisation</span>' : '') + '</td><td class="small">' + (f.alertes ? '<span class="pill warn">' + esc(f.alertes) + '</span>' : '<span class="muted">Lecture complète</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="empty">Rien à valider : toutes les factures sont vérifiées.</div>');
+  $('faZone').innerHTML = h;
+  var suite = l.map(function (f) { return f.id; });
+  $('faZone').querySelectorAll('tr[data-fa]').forEach(function (tr) { tr.onclick = function () { formFacture(D.factures.filter(function (f) { return f.id === tr.dataset.fa; })[0], gestion, { suite: suite, D: D }); }; });
+  if ($('vaGo')) $('vaGo').onclick = function () { formFacture(l[0], gestion, { suite: suite, D: D }); };
+  brancherImport('vaImp', function (file) { return deposerFacture(file, $('vaSens').value); });
+}
+
+/* ---------- Factures ---------- */
+function vueListeFactures(D, P, gestion) {
+  var factures = D.factures;
   var l = factures.filter(function (f) {
     if (!periodeOk(f.date, P)) return false;
     if (P.sens !== 'tous' && f.sens !== P.sens) return false;
     if (P.statut === 'attente' && !(nb(f.reste) > 0.005)) return false;
     if (P.statut === 'soldée' && f.statut !== 'soldée') return false;
-    if (P.statut === 'verifier' && !(f.alertes && f.verifie !== 'oui')) return false;
+    if (P.statut === 'verifier' && f.verifie === 'oui') return false;
     if (P.q) { var q = normC(P.q).trim(); if (normC([f.tiers, f.numero, f.nomFichier, f.note].join(' ')).indexOf(q) < 0) return false; }
     return true;
   });
   var tot = function (sens, k) { return l.filter(function (f) { return f.sens === sens; }).reduce(function (s, f) { return s + k(f); }, 0); };
-  var h = (gestion ? zoneImport('faImp', 'Lire des factures', 'PDF ou photos (plusieurs à la fois). L\'outil lit la date, le client ou le fournisseur, le numéro, la TVA par taux, les totaux, la prime CEE et les acomptes cités. Tout reste modifiable.', 'application/pdf,image/*',
-      '<label class="f" style="max-width:320px">Type de facture<select id="faSensImp"><option value="">Détection automatique</option><option value="vente">Facture client (vente)</option><option value="achat">Facture fournisseur (achat)</option></select></label>') : '') +
+  var h = (gestion ? zoneImport('faImp', 'Ajouter des factures', 'PDF, photos, ou liste exportée de votre logiciel de facturation ou de la banque (CSV, Excel). Chaque facture arrive « à valider ».', 'application/pdf,image/*,.csv,.xlsx,.xls,.ods,text/csv',
+      '<label class="f" style="max-width:320px">Type de facture<select id="faSensImp"><option value="">Détection automatique</option><option value="vente">Facture client (vente)</option><option value="achat">Facture fournisseur (achat)</option></select></label>', true) : '') +
     '<div class="grid">' +
     '<div class="card"><span class="tag">Ventes · ' + esc(libPeriode(P)) + '</span><b style="font-size:22px">' + eur(tot('vente', function (f) { return nb(f.ttc); })) + ' TTC</b><span class="muted small">HT ' + eur(tot('vente', function (f) { return nb(f.ht); })) + ' · TVA ' + eur(tot('vente', tvaDe)) + '</span><span class="small">Encaissé ' + eur(tot('vente', encaisse)) + ' · <b>reste ' + eur(tot('vente', function (f) { return nb(f.reste); })) + '</b></span></div>' +
     '<div class="card"><span class="tag">Achats · ' + esc(libPeriode(P)) + '</span><b style="font-size:22px">' + eur(tot('achat', function (f) { return nb(f.ttc); })) + ' TTC</b><span class="muted small">HT ' + eur(tot('achat', function (f) { return nb(f.ht); })) + ' · TVA ' + eur(tot('achat', tvaDe)) + '</span><span class="small">Payé ' + eur(tot('achat', encaisse)) + ' · <b>reste ' + eur(tot('achat', function (f) { return nb(f.reste); })) + '</b></span></div>' +
     '</div>' +
     '<div class="row"><span class="muted small" style="flex:1">' + l.length + ' facture(s)</span><button class="btn ghost small" id="faCsv">Exporter en CSV</button><button class="btn ghost small" id="faCsvE">Exporter les encaissements (CSV)</button></div>' +
-    (l.length ? '<div class="tablewrap"><table><thead><tr><th>Date</th><th>Type</th><th>Client / fournisseur</th><th>N°</th><th style="text-align:right">HT</th><th>TVA</th><th style="text-align:right">TTC</th><th style="text-align:right">Encaissé</th><th style="text-align:right">Reste</th><th>État</th></tr></thead><tbody>' +
+    (l.length ? '<div class="tablewrap"><table><thead><tr><th>Date</th><th>Type</th><th>Client / fournisseur</th><th>N°</th><th>Compte</th><th style="text-align:right">HT</th><th>TVA</th><th style="text-align:right">TTC</th><th style="text-align:right">Encaissé</th><th style="text-align:right">Reste</th><th>État</th></tr></thead><tbody>' +
       l.map(function (f) {
-        return '<tr class="click" data-fa="' + esc(f.id) + '"><td class="small">' + esc(dateFr(f.date)) + '</td><td><span class="pill ' + (f.sens === 'vente' ? 'ok' : '') + '">' + (f.sens === 'vente' ? 'Vente' : 'Achat') + '</span></td><td><b>' + esc(f.tiers || '—') + '</b>' + (f.alertes && f.verifie !== 'oui' ? '<br><span class="pill warn" title="' + esc(f.alertes) + '">À vérifier</span>' : '') + '</td><td class="small">' + esc(f.numero) + '</td>' +
+        return '<tr class="click" data-fa="' + esc(f.id) + '"><td class="small">' + esc(dateFr(f.date)) + '</td><td><span class="pill ' + (f.sens === 'vente' ? 'ok' : '') + '">' + (f.sens === 'vente' ? 'Vente' : 'Achat') + '</span></td><td><b>' + esc(f.tiers || '—') + '</b>' + (f.verifie !== 'oui' ? '<br><span class="pill warn" title="' + esc(f.alertes || 'Lue automatiquement') + '">À valider</span>' : '') + '</td><td class="small">' + esc(f.numero) + '</td><td class="small" title="' + esc(CPT.libelle(f.compte)) + '">' + esc(f.compte || '') + (f.autoliq === 'oui' ? '<br><span class="pill">autoliq.</span>' : '') + '</td>' +
           '<td style="text-align:right">' + eur2(f.ht) + '</td><td class="small">' + (f.lignesTva || []).map(function (x) { return String(x.taux).replace('.', ',') + ' % : ' + eur(nb(x.montant)); }).join('<br>') + '</td><td style="text-align:right"><b>' + eur2(f.ttc) + '</b>' + (nb(f.cee) ? '<br><span class="muted small">CEE −' + eur2(f.cee) + '</span>' : '') + '</td>' +
-          '<td style="text-align:right">' + eur(encaisse(f)) + '<br><span class="muted small">' + (f.encaissements || []).map(function (e) { return esc(dateFr(e.date)); }).join(', ') + '</span></td><td style="text-align:right">' + (nb(f.reste) > 0.005 ? '<b>' + eur2(f.reste) + '</b>' : '—') + '</td>' +
+          '<td style="text-align:right">' + eur(encaisse(f)) + '<br><span class="muted small">' + (f.encaissements || []).map(function (e) { return esc(dateFr(e.date)) + (e.origine === 'banque' ? ' ✓' : ''); }).join(', ') + '</span></td><td style="text-align:right">' + (nb(f.reste) > 0.005 ? '<b>' + eur2(f.reste) + '</b>' : '—') + '</td>' +
           '<td><span class="pill ' + (f.statut === 'soldée' ? 'ok' : f.statut === 'partielle' ? 'warn' : f.statut === 'en attente' ? 'ko' : '') + '">' + esc(f.statut) + '</span></td></tr>';
-      }).join('') + '</tbody></table></div>' : '<div class="empty">Aucune facture pour cette sélection.</div>');
+      }).join('') + '</tbody></table></div><p class="muted small">✓ : paiement retrouvé sur un relevé de compte.</p>' : '<div class="empty">Aucune facture pour cette sélection.</div>');
   $('faZone').innerHTML = h;
-  $('faZone').querySelectorAll('tr[data-fa]').forEach(function (tr) { tr.onclick = function () { formFacture(factures.filter(function (f) { return f.id === tr.dataset.fa; })[0], gestion); }; });
-  brancherImport('faImp', function (file) {
-    return lireTexte(file).then(function (r) {
-      return call('importerFacture', { base64: r.x.base64, nom: r.x.nom, mimeType: r.x.mimeType, texte: r.texte, sens: $('faSensImp').value });
-    }).then(function (f) { return (f.sens === 'vente' ? 'vente' : 'achat') + ' · ' + (f.tiers || 'tiers ?') + ' · ' + (f.ttc ? eur(nb(f.ttc)) + ' TTC' : 'TTC ?') + (f.alertes ? ' · à vérifier' : ''); });
-  });
+  $('faZone').querySelectorAll('tr[data-fa]').forEach(function (tr) { tr.onclick = function () { formFacture(factures.filter(function (f) { return f.id === tr.dataset.fa; })[0], gestion, { D: D }); }; });
+  brancherImport('faImp', function (file) { return deposerFacture(file, $('faSensImp').value); });
   $('faCsv').onclick = function () {
     var taux = [20, 10, 5.5, 2.1];
     telechargerCsv('factures-' + libPeriode(P).replace(/\s/g, '-') + '.csv',
-      ['Date', 'Type', 'Client / fournisseur', 'Numéro', 'Total HT'].concat([].concat.apply([], taux.map(function (t) { var s = String(t).replace('.', ','); return ['Base HT ' + s + ' %', 'TVA ' + s + ' %']; }))).concat(['TVA totale', 'Total TTC', 'Prime CEE', 'Net à payer', 'Encaissé / payé', 'Dates d\'encaissement', 'Reste', 'État', 'Échéance', 'Fichier']),
+      ['Date', 'Type', 'Client / fournisseur', 'Numéro', 'Compte', 'Libellé du compte', 'Total HT'].concat([].concat.apply([], taux.map(function (t) { var s = String(t).replace('.', ','); return ['Base HT ' + s + ' %', 'TVA ' + s + ' %']; }))).concat(['TVA totale', 'Total TTC', 'Prime CEE', 'Net à payer', 'Encaissé / payé', 'Dates d\'encaissement', 'Reste', 'État', 'Validée', 'Échéance', 'Fichier']),
       l.map(function (f) {
-        return [f.date, f.sens === 'vente' ? 'Vente' : 'Achat', f.tiers, f.numero, nb(f.ht)].concat([].concat.apply([], taux.map(function (t) { var x = (f.lignesTva || []).filter(function (y) { return nb(y.taux) === t; })[0]; return x ? [nb(x.base), nb(x.montant)] : ['', '']; })))
-          .concat([tvaDe(f), nb(f.ttc), nb(f.cee) || '', netDe(f), encaisse(f), (f.encaissements || []).map(function (e) { return e.date + ' (' + String(e.montant).replace('.', ',') + ')'; }).join(' + '), nb(f.reste), f.statut, f.echeance, f.nomFichier]);
+        return [f.date, f.sens === 'vente' ? 'Vente' : 'Achat', f.tiers, f.numero, f.compte, CPT.libelle(f.compte), nb(f.ht)].concat([].concat.apply([], taux.map(function (t) { var x = (f.lignesTva || []).filter(function (y) { return nb(y.taux) === t; })[0]; return x ? [nb(x.base), nb(x.montant)] : ['', '']; })))
+          .concat([tvaDe(f), nb(f.ttc), nb(f.cee) || '', netDe(f), encaisse(f), (f.encaissements || []).map(function (e) { return e.date + ' (' + String(e.montant).replace('.', ',') + ')'; }).join(' + '), nb(f.reste), f.statut, f.verifie === 'oui' ? 'oui' : 'non', f.echeance, f.nomFichier]);
       }));
   };
   $('faCsvE').onclick = function () {
@@ -2146,145 +2996,470 @@ function vueListeFactures(factures, P, gestion) {
     telechargerCsv('encaissements-' + libPeriode(P).replace(/\s/g, '-') + '.csv', ['Date', 'Type', 'Client / fournisseur', 'Facture', 'Montant', 'Mode', 'Source'], e);
   };
 }
-function formFacture(f, gestion) {
+/** Aperçu du document (photo ou première page du PDF) à côté des champs lus. */
+function apercuFacture(f, zone) {
+  if (!f.fileId || !zone) return;
+  zone.innerHTML = '<span class="muted small">Chargement du document…</span>';
+  call('getFile', { fileId: f.fileId }).then(function (x) {
+    if (/^image\//.test(x.mimeType)) { zone.innerHTML = '<img alt="Facture" style="width:100%;border-radius:8px;border:1px solid var(--line)" src="data:' + x.mimeType + ';base64,' + x.base64 + '">'; return; }
+    if (!/pdf/.test(x.mimeType)) { zone.innerHTML = ''; return; }
+    return chargerPdfJs().then(function (lib) {
+      var bin = atob(x.base64), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return lib.getDocument({ data: u }).promise.then(function (doc) { return doc.getPage(1); }).then(function (pg) {
+        var vp = pg.getViewport({ scale: 1.4 }), c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height; c.style.cssText = 'width:100%;border-radius:8px;border:1px solid var(--line)';
+        zone.innerHTML = ''; zone.appendChild(c);
+        return pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      });
+    });
+  }).catch(function () { zone.innerHTML = '<span class="muted small">Aperçu indisponible : utilisez « Voir la facture ».</span>'; });
+}
+function formFacture(f, gestion, opts) {
+  opts = opts || {};
   var F = JSON.parse(JSON.stringify(f));
   F.lignesTva = F.lignesTva || []; F.encaissements = F.encaissements || [];
-  var dis = gestion ? '' : ' disabled';
-  var m = modale((F.sens === 'vente' ? 'Facture client' : 'Facture fournisseur') + (F.numero ? ' n° ' + F.numero : ''), '<form id="ffF" style="display:grid;gap:10px">' +
-    (F.alertes && F.verifie !== 'oui' ? '<div class="card" style="border-color:var(--warn)"><span class="tag" style="color:var(--warn)">À vérifier</span><span class="small">' + esc(F.alertes) + '</span></div>' : '') +
+  if (!F.compte) F.compte = F.sens === 'vente' ? ((opts.D && opts.D.prm.societe.compteVentes) || '706') : '6068';
+  if (!F.nature) F.nature = F.sens === 'vente' ? 'service' : 'bien';
+  if (F.pctTva === '' || F.pctTva == null) F.pctTva = '100';
+  var dis = gestion ? '' : ' disabled', aValider = F.verifie !== 'oui';
+  var suite = (opts.suite || []).filter(function (id) { return id !== F.id; });
+  var m = modale((aValider ? 'À valider · ' : '') + (F.sens === 'vente' ? 'Facture client' : 'Facture fournisseur') + (F.numero ? ' n° ' + F.numero : ''), '<div class="ffgrid"><div id="ffApercu"></div><form id="ffF" style="display:grid;gap:10px">' +
+    (F.alertes && aValider ? '<div class="card" style="border-color:var(--warn)"><span class="tag" style="color:var(--warn)">À vérifier</span><span class="small">' + esc(F.alertes) + '</span></div>' : '') +
     '<div class="fgrid"><label class="f">Type<select name="sens"' + dis + '><option value="vente">Vente (client)</option><option value="achat"' + (F.sens === 'achat' ? ' selected' : '') + '>Achat (fournisseur)</option></select></label><label class="f">' + (F.sens === 'vente' ? 'Client' : 'Fournisseur') + '<input name="tiers" maxlength="150" value="' + esc(F.tiers) + '"' + dis + '></label><label class="f">Numéro<input name="numero" maxlength="40" value="' + esc(F.numero) + '"' + dis + '></label></div>' +
     '<div class="fgrid"><label class="f">Date de la facture<input type="date" name="date" value="' + esc(F.date) + '"' + dis + '></label><label class="f">Échéance<input type="date" name="echeance" value="' + esc(F.echeance) + '"' + dis + '></label></div>' +
+    '<fieldset><legend>Classement comptable</legend><div class="fgrid"><label class="f">Compte<select name="compte" id="ffCpt"' + dis + '>' + optionsComptes(F.compte, function (c) { return F.sens === 'vente' ? /^7/.test(c) : /^(6|2)/.test(c); }) + '</select></label>' +
+    (F.sens === 'achat' ? '<label class="f">Nature<select name="nature" id="ffNat"' + dis + '><option value="bien"' + (F.nature === 'bien' ? ' selected' : '') + '>Bien (TVA déductible à la facture)</option><option value="service"' + (F.nature === 'service' ? ' selected' : '') + '>Service (TVA déductible au paiement)</option><option value="immo"' + (F.nature === 'immo' ? ' selected' : '') + '>Immobilisation (matériel durable)</option></select></label><label class="f">TVA récupérable<select name="pctTva"' + dis + '>' + [['100', '100 %'], ['80', '80 % (essence d\'un véhicule de tourisme)'], ['0', '0 % (non récupérable)']].map(function (o) { return '<option value="' + o[0] + '"' + (String(F.pctTva) === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' : '') +
+    '</div><label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="autoliq"' + (F.autoliq === 'oui' ? ' checked' : '') + dis + '> Autoliquidation de la TVA (sous-traitance du bâtiment : facture sans TVA)</label></fieldset>' +
     '<fieldset><legend>TVA</legend><div id="ffT" style="display:grid;gap:6px"></div>' + (gestion ? '<div class="row"><button type="button" class="btn ghost small" id="ffTA">+ Ajouter un taux</button></div>' : '') + '</fieldset>' +
-    '<div class="fgrid"><label class="f">Total HT<input name="ht" inputmode="decimal" value="' + esc(F.ht) + '"' + dis + '></label><label class="f">Total TTC<input name="ttc" inputmode="decimal" value="' + esc(F.ttc) + '"' + dis + '></label><label class="f">Prime CEE déduite<input name="cee" inputmode="decimal" value="' + esc(F.cee) + '"' + dis + '></label><label class="f">Net à payer<input name="netAPayer" inputmode="decimal" value="' + esc(F.netAPayer) + '" placeholder="= TTC − CEE"' + dis + '></label></div>' +
+    '<div class="fgrid"><label class="f">Total HT<input name="ht" inputmode="decimal" value="' + esc(F.ht) + '"' + dis + '></label><label class="f">Total TTC<input name="ttc" inputmode="decimal" value="' + esc(F.ttc) + '"' + dis + '></label>' + (F.sens === 'vente' ? '<label class="f">Prime CEE déduite<input name="cee" inputmode="decimal" value="' + esc(F.cee) + '"' + dis + '></label><label class="f">Net à payer<input name="netAPayer" inputmode="decimal" value="' + esc(F.netAPayer) + '" placeholder="= TTC − CEE"' + dis + '></label>' : '') + '</div>' +
     (F.sens === 'vente' ? '<label class="f" style="max-width:260px">Prime CEE reçue de la plateforme le<input type="date" name="ceeRecue" value="' + esc(F.ceeRecue) + '"' + dis + '></label>' : '') +
-    '<fieldset><legend>' + (F.sens === 'vente' ? 'Encaissements' : 'Règlements') + '</legend><div id="ffE" style="display:grid;gap:6px"></div>' + (gestion ? '<div class="row"><button type="button" class="btn ghost small" id="ffEA">+ Ajouter</button></div>' : '') + '<b id="ffR"></b></fieldset>' +
+    '<fieldset><legend>' + (F.sens === 'vente' ? 'Encaissements' : 'Règlements') + '</legend><div id="ffE" style="display:grid;gap:6px"></div>' + (gestion ? '<div class="row"><button type="button" class="btn ghost small" id="ffEA">+ Ajouter</button></div>' : '') + '<b id="ffR"></b><span class="muted small">La TVA n\'est comptée qu\'une fois le paiement retrouvé sur un relevé de compte (onglet Relevés de compte), ou payé en espèces ou par le dirigeant.</span></fieldset>' +
     '<label class="f">Note<input name="note" maxlength="500" value="' + esc(F.note) + '"' + dis + '></label>' +
-    '<div class="err" id="ffErr"></div><div class="row">' + (gestion ? '<button class="btn primary">Enregistrer (vérifiée)</button>' : '') + (F.fileId ? '<button type="button" class="btn ghost" id="ffO">Voir la facture</button>' : '') + (gestion ? '<button type="button" class="btn ghost" id="ffRe">Relire</button><button type="button" class="btn danger" id="ffD">Supprimer</button>' : '') + '<button type="button" class="btn ghost" id="ffX">Fermer</button></div></form>', true);
+    '<div class="err" id="ffErr"></div><div class="row">' + (gestion ? '<button class="btn primary">' + (aValider ? 'Valider' : 'Enregistrer') + '</button>' + (aValider && suite.length ? '<button type="button" class="btn primary" id="ffSuiv">Valider et suivante (' + suite.length + ')</button>' : '') : '') + (F.fileId ? '<button type="button" class="btn ghost" id="ffO">Voir la facture</button>' : '') + (gestion && F.fileId ? '<button type="button" class="btn ghost" id="ffRe">Relire</button>' : '') + (gestion ? '<button type="button" class="btn danger" id="ffD">Supprimer</button>' : '') + '<button type="button" class="btn ghost" id="ffX">Fermer</button></div></form></div>', true);
+  apercuFacture(F, $('ffApercu'));
   var champ = function (k, v, ph, w) { return '<input data-k="' + k + '" inputmode="decimal" value="' + esc(v) + '" placeholder="' + ph + '" style="width:' + (w || 110) + 'px;padding:7px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2)"' + dis + '>'; };
   function lire() {
     $('ffT').querySelectorAll('[data-i]').forEach(function (row) { var x = F.lignesTva[+row.dataset.i]; row.querySelectorAll('[data-k]').forEach(function (el) { x[el.dataset.k] = el.value; }); });
     $('ffE').querySelectorAll('[data-i]').forEach(function (row) { var x = F.encaissements[+row.dataset.i]; row.querySelectorAll('[data-k]').forEach(function (el) { x[el.dataset.k] = el.value; }); });
     var d = formData($('ffF')); Object.keys(d).forEach(function (k) { F[k] = d[k]; });
+    F.autoliq = d.autoliq ? 'oui' : '';
   }
   function reste() { lire(); var net = nb(F.netAPayer) || (nb(F.ttc) - nb(F.cee)), r = net - encaisse(F); $('ffR').textContent = (F.sens === 'vente' ? 'Reste à encaisser : ' : 'Reste à payer : ') + eur(Math.max(0, r)); }
   function dessiner() {
-    $('ffT').innerHTML = F.lignesTva.map(function (x, i) { return '<div class="row" data-i="' + i + '">Taux ' + champ('taux', String(x.taux).replace('.', ','), '%', 60) + ' % · base HT ' + champ('base', x.base, 'base') + ' · TVA ' + champ('montant', x.montant, 'montant') + (gestion ? '<button type="button" class="btn danger small" data-rt="' + i + '">✕</button>' : '') + '</div>'; }).join('') || '<span class="muted small">Aucun taux trouvé.</span>';
-    $('ffE').innerHTML = F.encaissements.map(function (e, i) { return '<div class="row" data-i="' + i + '"><input type="date" data-k="date" value="' + esc(e.date) + '" style="padding:6px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2)"' + dis + '>' + champ('montant', e.montant, 'montant') + '<input data-k="mode" value="' + esc(e.mode) + '" placeholder="mode" style="width:110px;padding:7px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2)"' + dis + '><span class="muted small">' + (e.origine === 'banque' ? 'relevé bancaire' : e.origine === 'document' ? 'indiqué sur la facture' : '') + '</span>' + (gestion ? '<button type="button" class="btn danger small" data-re="' + i + '">✕</button>' : '') + '</div>'; }).join('') || '<span class="muted small">Aucun encaissement enregistré.</span>';
+    $('ffT').innerHTML = F.lignesTva.map(function (x, i) { return '<div class="row" data-i="' + i + '">Taux ' + champ('taux', String(x.taux).replace('.', ','), '%', 60) + ' % · base HT ' + champ('base', x.base, 'base') + ' · TVA ' + champ('montant', x.montant, 'montant') + (gestion ? '<button type="button" class="btn danger small" data-rt="' + i + '">✕</button>' : '') + '</div>'; }).join('') || '<span class="muted small">Aucun taux (facture sans TVA ou à compléter).</span>';
+    $('ffE').innerHTML = F.encaissements.map(function (e, i) { return '<div class="row" data-i="' + i + '"><input type="date" data-k="date" value="' + esc(e.date) + '" style="padding:6px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2)"' + dis + '>' + champ('montant', e.montant, 'montant') + '<select data-k="mode" style="padding:7px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2)"' + dis + '>' + ['Virement', 'Chèque', 'Carte', 'Prélèvement', 'Espèces', 'Payé par le dirigeant', 'Prime CEE'].concat(e.mode && ['Virement', 'Chèque', 'Carte', 'Prélèvement', 'Espèces', 'Payé par le dirigeant', 'Prime CEE'].indexOf(e.mode) < 0 ? [e.mode] : []).map(function (o) { return '<option' + (o === e.mode ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select><span class="small ' + (CPT.confirme(e) ? '' : 'muted') + '">' + (e.origine === 'banque' ? '✓ vu sur le relevé' : CPT.confirme(e) ? 'comptée' : e.origine === 'document' ? 'indiqué sur la facture · à retrouver sur un relevé' : 'à retrouver sur un relevé') + '</span>' + (gestion ? '<button type="button" class="btn danger small" data-re="' + i + '">✕</button>' : '') + '</div>'; }).join('') || '<span class="muted small">Aucun paiement enregistré.</span>';
     $('ffT').querySelectorAll('[data-rt]').forEach(function (b) { b.onclick = function () { lire(); F.lignesTva.splice(+b.dataset.rt, 1); dessiner(); }; });
     $('ffE').querySelectorAll('[data-re]').forEach(function (b) { b.onclick = function () { lire(); F.encaissements.splice(+b.dataset.re, 1); dessiner(); }; });
     reste();
   }
   dessiner();
   $('ffF').addEventListener('input', reste);
+  if ($('ffNat')) $('ffNat').onchange = function () { if ($('ffNat').value === 'immo' && !/^2/.test($('ffCpt').value)) $('ffCpt').value = '2154'; if ($('ffNat').value !== 'immo' && /^2/.test($('ffCpt').value)) $('ffCpt').value = '6063'; };
+  if ($('ffCpt') && $('ffNat')) $('ffCpt').addEventListener('change', function () { if (/^2/.test($('ffCpt').value)) $('ffNat').value = 'immo'; else if ($('ffNat').value === 'immo') $('ffNat').value = 'bien'; });
   $('ffX').onclick = function () { m.fermer(); };
   if ($('ffTA')) $('ffTA').onclick = function () { lire(); F.lignesTva.push({ taux: 20, base: '', montant: '' }); dessiner(); };
-  if ($('ffEA')) $('ffEA').onclick = function () { lire(); F.encaissements.push({ date: isoJour(new Date()), montant: Math.max(0, nb(F.netAPayer) || (nb(F.ttc) - nb(F.cee))) - encaisse(F) > 0 ? Math.round(((nb(F.netAPayer) || (nb(F.ttc) - nb(F.cee))) - encaisse(F)) * 100) / 100 : '', mode: 'Virement', origine: 'saisie' }); dessiner(); };
+  if ($('ffEA')) $('ffEA').onclick = function () { lire(); var du = Math.round(((nb(F.netAPayer) || (nb(F.ttc) - nb(F.cee))) - encaisse(F)) * 100) / 100; F.encaissements.push({ date: isoJour(new Date()), montant: du > 0 ? du : '', mode: 'Virement', origine: 'saisie' }); dessiner(); };
   if ($('ffO')) $('ffO').onclick = function () { ouvrirDirect(F.fileId, F.nomFichier); };
-  if ($('ffRe')) $('ffRe').onclick = function () { var b = $('ffRe'); b.disabled = true; b.textContent = 'Lecture…'; call('relireFacture', { id: F.id, ocr: true }).then(function (x) { m.remove(); toast('Facture relue.'); formFacture(x, gestion); }).catch(function (e) { b.disabled = false; b.textContent = 'Relire'; echec(e); }); };
+  if ($('ffRe')) $('ffRe').onclick = function () { var b = $('ffRe'); b.disabled = true; b.textContent = 'Lecture…'; call('relireFacture', { id: F.id, ocr: true }).then(function (x) { m.remove(); toast('Facture relue.'); formFacture(x, gestion, opts); }).catch(function (e) { b.disabled = false; b.textContent = 'Relire'; echec(e); }); };
   if ($('ffD')) $('ffD').onclick = function () { var b = $('ffD'); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Confirmer la suppression'; return; } call('remove', { table: 'Factures', id: F.id }).then(function () { m.remove(); ouvrir('factures'); }).catch(echec); };
-  $('ffF').onsubmit = function (ev) {
-    ev.preventDefault(); lire();
-    var row = { id: F.id, sens: F.sens, tiers: F.tiers, numero: F.numero, date: F.date, echeance: F.echeance, ht: F.ht, ttc: F.ttc, cee: F.cee, ceeRecue: F.ceeRecue || '', netAPayer: F.netAPayer, note: F.note, verifie: 'oui', alertes: F.alertes,
+  var enregistrer = function (ensuite) {
+    lire();
+    var row = { id: F.id, sens: F.sens, tiers: F.tiers, numero: F.numero, date: F.date, echeance: F.echeance, ht: F.ht, ttc: F.ttc, cee: F.cee || '', ceeRecue: F.ceeRecue || '', netAPayer: F.netAPayer || '', note: F.note, verifie: 'oui', alertes: F.alertes,
+      compte: F.compte, nature: F.sens === 'vente' ? 'service' : F.nature, pctTva: F.sens === 'vente' ? '100' : F.pctTva, autoliq: F.autoliq,
       lignesTva: F.lignesTva.map(function (x) { return { taux: nb(x.taux), base: nb(x.base), montant: nb(x.montant) }; }),
       encaissements: F.encaissements.map(function (e) { return { date: e.date, montant: nb(e.montant), mode: e.mode, origine: e.origine || 'saisie', operationId: e.operationId || '' }; }) };
+    if (!row.date) { $('ffErr').textContent = 'Indiquez la date de la facture.'; return; }
     var somme = nb(row.ht) + row.lignesTva.reduce(function (s, x) { return s + x.montant; }, 0);
-    if (row.ttc && Math.abs(somme - nb(row.ttc)) > 0.05 && !$('ffErr').dataset.vu) { $('ffErr').dataset.vu = 1; $('ffErr').textContent = 'HT + TVA = ' + eur(somme) + ' au lieu de ' + eur(nb(row.ttc)) + ' TTC : vérifiez les montants (cliquez de nouveau sur Enregistrer pour garder tel quel).'; return; }
-    call('save', { table: 'Factures', row: row }).then(function () { m.remove(); toast('Facture enregistrée.'); ouvrir('factures'); }).catch(function (e) { $('ffErr').textContent = e.message; });
+    if (row.ttc && Math.abs(somme - nb(row.ttc)) > 0.05 && row.autoliq !== 'oui' && !$('ffErr').dataset.vu) { $('ffErr').dataset.vu = 1; $('ffErr').textContent = 'HT + TVA = ' + eur(somme) + ' au lieu de ' + eur(nb(row.ttc)) + ' TTC : vérifiez les montants (cliquez de nouveau pour garder tel quel).'; return; }
+    var D = opts.D, immoExiste = D && D.immos.some(function (i) { return i.factureId === F.id; });
+    call('save', { table: 'Factures', row: row }).then(function () {
+      if (row.sens === 'achat' && (row.nature === 'immo' || /^2/.test(row.compte)) && !immoExiste) {
+        var pct = nb(row.pctTva) / 100, tvaNR = row.lignesTva.reduce(function (s, x) { return s + x.montant; }, 0) * (1 - pct);
+        return call('save', { table: 'Immobilisations', row: { libelle: (row.tiers || '') + (row.note ? ' · ' + row.note : ''), compte: /^2/.test(row.compte) ? row.compte : '2154', dateAcq: row.date, valeur: String(Math.round((nb(row.ht) + tvaNR) * 100) / 100), duree: String(CPT.DUREES[row.compte] || 5), factureId: F.id } }).then(function () { toast('Immobilisation ajoutée au tableau d\'amortissement (durée à vérifier).'); });
+      }
+    }).then(function () {
+      m.remove(); toast(aValider ? 'Facture validée.' : 'Facture enregistrée.');
+      if (ensuite && suite.length && D) {
+        var prochaine = D.factures.filter(function (x) { return x.id === suite[0]; })[0];
+        if (prochaine) { formFacture(prochaine, gestion, { suite: suite, D: D }); return; }
+      }
+      ouvrir('factures');
+    }).catch(function (e) { $('ffErr').textContent = e.message; });
   };
+  $('ffF').onsubmit = function (ev) { ev.preventDefault(); enregistrer(false); };
+  if ($('ffSuiv')) $('ffSuiv').onclick = function () { enregistrer(true); };
 }
 
-/* ---------- Relevés de compte et rapprochement ---------- */
-function vueBanque(ops, factures, P, gestion) {
+/* ---------- Relevés de compte : import, rapprochement avec les factures, classement des autres opérations ---------- */
+var COMPTES_BANQUE = ['627', '661', '164', '645', '646', '44551', '444', '635', '421', '455', '616', '60622', '626', '6251', '6256', '6257', '651', '601', '6135', '6063', '623', '6226', '467', '101', '58', '53', '771', '758', '775', '471'];
+function vueBanque(D, P, gestion) {
+  var ops = D.ops, factures = D.factures;
   var l = ops.filter(function (o) { return periodeOk(o.date, P); });
   var parId = {}; factures.forEach(function (f) { parId[f.id] = f; });
   var credits = l.filter(function (o) { return nb(o.montant) > 0; }), debits = l.filter(function (o) { return nb(o.montant) < 0; });
   var nonR = l.filter(function (o) { return !o.factureId; });
-  var sugg = {}; nonR.forEach(function (o) { sugg[o.id] = propositions(o, factures); });
+  var sugg = {}, classe = {}; nonR.forEach(function (o) { sugg[o.id] = propositions(o, factures); classe[o.id] = CPT.classerOperation(o); });
   var sures = nonR.filter(function (o) { var p = sugg[o.id]; return p.length && p[0].s >= 95 && (p.length === 1 || p[1].s < p[0].s - 20); });
-  var h = (gestion ? zoneImport('bqImp', 'Importer des relevés de compte', 'PDF de la banque (plusieurs à la fois). Les opérations sont lues avec leur sens (crédit / débit) ; un relevé déjà importé n\'est pas compté deux fois.', 'application/pdf,image/*') : '') +
-    '<div class="grid"><div class="card"><span class="tag">Crédits · ' + esc(libPeriode(P)) + '</span><b style="font-size:22px">' + eur(credits.reduce(function (s, o) { return s + nb(o.montant); }, 0)) + '</b><span class="small">' + credits.filter(function (o) { return !o.factureId; }).length + ' non rapproché(s)</span></div>' +
-    '<div class="card"><span class="tag">Débits · ' + esc(libPeriode(P)) + '</span><b style="font-size:22px">' + eur(-debits.reduce(function (s, o) { return s + nb(o.montant); }, 0)) + '</b><span class="small">' + debits.filter(function (o) { return !o.factureId; }).length + ' non rapproché(s)</span></div></div>' +
-    '<div class="row"><span class="muted small" style="flex:1">' + l.length + ' opération(s)</span>' + (gestion && sures.length ? '<button class="btn primary small" id="bqAuto">Rapprocher automatiquement (' + sures.length + ' sûr' + (sures.length > 1 ? 's' : '') + ')</button>' : '') + '<button class="btn ghost small" id="bqCsv">Exporter en CSV</button></div>' +
-    (l.length ? '<div class="tablewrap"><table><thead><tr><th>Date</th><th>Libellé</th><th style="text-align:right">Montant</th><th>Facture</th></tr></thead><tbody>' + l.map(function (o) {
-      var f = parId[o.factureId], v = nb(o.montant);
-      return '<tr><td class="small">' + esc(dateFr(o.date)) + '</td><td>' + esc(o.libelle) + (o.incertain === 'oui' ? ' <span class="pill warn" title="Sens crédit / débit non certain">sens ?</span>' : '') + '<br><span class="muted small">' + esc(o.releve) + '</span></td><td style="text-align:right;white-space:nowrap;color:' + (v > 0 ? 'var(--ok)' : 'var(--ko)') + '"><b>' + (v > 0 ? '+' : '−') + eur(Math.abs(v)) + '</b>' + (gestion && o.incertain === 'oui' ? '<br><button class="btn ghost small" data-sg="' + esc(o.id) + '">Inverser</button>' : '') + '</td><td>' +
-        (f ? '<span class="pill ok">' + (o.nature === 'cee' ? 'Prime CEE · ' : '') + esc((f.tiers || '') + (f.numero ? ' · ' + f.numero : '')) + '</span>' + (gestion ? ' <button class="btn ghost small" data-dis="' + esc(o.id) + '">Dissocier</button>' : '')
-          : (sugg[o.id].map(function (p) { return (gestion ? '<button class="btn ghost small" data-op="' + esc(o.id) + '" data-fac="' + esc(p.f.id) + '"' + (p.cee ? ' data-cee="1"' : '') + ' style="margin:2px">' : '<span class="pill">') + esc((p.cee ? 'Prime CEE · ' : '') + (p.f.tiers || 'sans nom') + ' · ' + (p.f.numero || dateFr(p.f.date)) + (p.cee ? ' · ' + eur(nb(p.f.cee)) : ' · reste ' + eur(nb(p.f.reste)))) + (gestion ? '</button>' : '</span>'); }).join('') || '<span class="muted small">Aucune facture correspondante</span>') +
-          (gestion ? ' <button class="btn ghost small" data-choix="' + esc(o.id) + '">Choisir…</button>' : '')) + '</td></tr>';
-    }).join('') + '</tbody></table></div>' : '<div class="empty">Aucune opération pour cette période. Importez un relevé de compte PDF.</div>');
-  // factures de vente non soldées sans aucun encaissement bancaire
+  var aClasser = nonR.filter(function (o) { return !o.compte && !sugg[o.id].length && classe[o.id].compte && classe[o.id].sur; });
+  var h = (gestion ? zoneImport('bqImp', 'Importer des relevés de compte', 'PDF de la banque, ou export CSV / Excel (plusieurs fichiers à la fois). Les opérations sont lues avec leur sens (crédit / débit) ; une opération déjà importée n\'est pas comptée deux fois.', 'application/pdf,image/*,.csv,.xlsx,.xls,.ods,.txt,text/csv') : '') +
+    '<div class="grid"><div class="card"><span class="tag">Crédits · ' + esc(libPeriode(P)) + '</span><b style="font-size:22px">' + eur(credits.reduce(function (s, o) { return s + nb(o.montant); }, 0)) + '</b><span class="small">' + credits.filter(function (o) { return !o.factureId && !o.compte; }).length + ' à rapprocher ou classer</span></div>' +
+    '<div class="card"><span class="tag">Débits · ' + esc(libPeriode(P)) + '</span><b style="font-size:22px">' + eur(-debits.reduce(function (s, o) { return s + nb(o.montant); }, 0)) + '</b><span class="small">' + debits.filter(function (o) { return !o.factureId && !o.compte; }).length + ' à rapprocher ou classer</span></div></div>' +
+    '<div class="row"><span class="muted small" style="flex:1">' + l.length + ' opération(s). Une opération se relie à sa facture ; sinon (frais, URSSAF, emprunt, TVA payée…) on lui donne un compte.</span>' + (gestion && sures.length ? '<button class="btn primary small" id="bqAuto">Rapprocher automatiquement (' + sures.length + ' sûr' + (sures.length > 1 ? 's' : '') + ')</button>' : '') + (gestion && aClasser.length ? '<button class="btn primary small" id="bqClasse">Classer automatiquement (' + aClasser.length + ')</button>' : '') + '<button class="btn ghost small" id="bqCsv">Exporter en CSV</button></div>' +
+    (l.length ? '<div class="tablewrap"><table><thead><tr><th>Date</th><th>Libellé</th><th style="text-align:right">Montant</th><th>Facture ou compte</th></tr></thead><tbody>' + l.map(function (o) {
+      var f = parId[o.factureId], v = nb(o.montant), c = classe[o.id] || {};
+      var cell;
+      if (f) cell = '<span class="pill ok">' + (o.nature === 'cee' ? 'Prime CEE · ' : '') + esc((f.tiers || '') + (f.numero ? ' · ' + f.numero : '')) + '</span>' + (gestion ? ' <button class="btn ghost small" data-dis="' + esc(o.id) + '">Dissocier</button>' : '');
+      else cell = (sugg[o.id].map(function (p) { return (gestion ? '<button class="btn ghost small" data-op="' + esc(o.id) + '" data-fac="' + esc(p.f.id) + '"' + (p.cee ? ' data-cee="1"' : '') + ' style="margin:2px">' : '<span class="pill">') + esc((p.cee ? 'Prime CEE · ' : '') + (p.f.tiers || 'sans nom') + ' · ' + (p.f.numero || dateFr(p.f.date)) + (p.cee ? ' · ' + eur(nb(p.f.cee)) : ' · reste ' + eur(nb(p.f.reste)))) + (gestion ? '</button>' : '</span>'); }).join('')) +
+        (gestion ? ' <button class="btn ghost small" data-choix="' + esc(o.id) + '">Facture…</button> <select data-cpt="' + esc(o.id) + '" style="max-width:230px;padding:5px;border:1.5px solid ' + (o.compte ? 'var(--ok)' : 'var(--line)') + ';border-radius:6px;background:var(--surface-2)"><option value="">' + (c.compte ? 'Proposé : ' + esc(c.compte + ' · ' + CPT.libelle(c.compte)) : '— compte (sans facture) —') + '</option>' + optionsComptes(o.compte, function (k) { return COMPTES_BANQUE.indexOf(k) >= 0 || k === o.compte; }) + '</select>' : (o.compte ? '<span class="pill">' + esc(o.compte + ' · ' + CPT.libelle(o.compte)) + '</span>' : '<span class="muted small">à classer</span>'));
+      return '<tr><td class="small">' + esc(dateFr(o.date)) + '</td><td>' + esc(o.libelle) + (o.incertain === 'oui' ? ' <span class="pill warn" title="Sens crédit / débit non certain">sens ?</span>' : '') + '<br><span class="muted small">' + esc(o.releve) + '</span></td><td style="text-align:right;white-space:nowrap;color:' + (v > 0 ? 'var(--ok)' : 'var(--ko)') + '"><b>' + (v > 0 ? '+' : '−') + eur(Math.abs(v)) + '</b>' + (gestion && o.incertain === 'oui' ? '<br><button class="btn ghost small" data-sg="' + esc(o.id) + '">Inverser</button>' : '') + '</td><td>' + cell + '</td></tr>';
+    }).join('') + '</tbody></table></div>' : '<div class="empty">Aucune opération pour cette période. Importez un relevé de compte (PDF, CSV ou Excel).</div>');
   var attente = factures.filter(function (f) { return f.sens === 'vente' && nb(f.reste) > 0.005; });
   if (attente.length) h += '<div class="head" style="border-bottom-width:1px"><h2 style="font-size:20px">Reste à encaisser</h2><span class="meta">' + eur(attente.reduce(function (s, f) { return s + nb(f.reste); }, 0)) + '</span></div><div class="tablewrap"><table><tbody>' + attente.map(function (f) { var retard = f.echeance && f.echeance < isoJour(new Date()); return '<tr><td>' + esc(f.tiers) + ' <span class="muted small">' + esc(f.numero) + '</span></td><td class="small">' + esc(dateFr(f.date)) + (f.echeance ? ' · échéance ' + esc(dateFr(f.echeance)) : '') + (retard ? ' <span class="pill ko">en retard</span>' : '') + '</td><td style="text-align:right"><b>' + eur2(f.reste) + '</b></td></tr>'; }).join('') + '</tbody></table></div>';
   $('faZone').innerHTML = h;
   brancherImport('bqImp', function (file) {
+    if (estTableau(file)) return importerTableauReleve(file);
     return lireTexte(file).then(function (r) {
       var o = r.pages ? operationsReleve(r.pages) : [];
       return call('importerReleve', { base64: r.x.base64, nom: r.x.nom, mimeType: r.x.mimeType, operations: o, texte: r.texte });
     }).then(function (x) { return x.ajoutes + ' opération(s) ajoutée(s)' + (x.doublons ? ', ' + x.doublons + ' déjà présente(s)' : ''); });
   });
   var lier = function (op, fac, cee) { return call('rapprocher', { operationId: op, factureId: fac, cee: !!cee }); };
-  $('faZone').querySelectorAll('[data-op]').forEach(function (b) { b.onclick = function () { b.disabled = true; lier(b.dataset.op, b.dataset.fac, b.dataset.cee).then(function () { toast('Rapproché : l\'encaissement est ajouté à la facture.'); ouvrir('factures'); }).catch(echec); }; });
+  $('faZone').querySelectorAll('[data-op]').forEach(function (b) { b.onclick = function () { b.disabled = true; lier(b.dataset.op, b.dataset.fac, b.dataset.cee).then(function () { toast('Rapproché : le paiement est ajouté à la facture.'); ouvrir('factures'); }).catch(echec); }; });
   $('faZone').querySelectorAll('[data-dis]').forEach(function (b) { b.onclick = function () { b.disabled = true; call('dissocier', { operationId: b.dataset.dis }).then(function () { ouvrir('factures'); }).catch(echec); }; });
   $('faZone').querySelectorAll('[data-sg]').forEach(function (b) { b.onclick = function () { var o = ops.filter(function (x) { return x.id === b.dataset.sg; })[0]; call('save', { table: 'Banque', row: { id: o.id, montant: String(-nb(o.montant)), incertain: '' } }).then(function () { ouvrir('factures'); }).catch(echec); }; });
+  $('faZone').querySelectorAll('[data-cpt]').forEach(function (s) { s.onchange = function () { var id = s.dataset.cpt, v = s.value || (classe[id] && classe[id].compte) || ''; call('save', { table: 'Banque', row: { id: id, compte: v } }).then(function () { s.style.borderColor = v ? 'var(--ok)' : 'var(--line)'; var o = ops.filter(function (x) { return x.id === id; })[0]; if (o) o.compte = v; D.ecr = CPT.ecritures(D, D.prm); toast(v ? 'Classée en ' + v + ' · ' + CPT.libelle(v) : 'Classement retiré.'); }).catch(echec); }; });
   $('faZone').querySelectorAll('[data-choix]').forEach(function (b) { b.onclick = function () {
     var o = ops.filter(function (x) { return x.id === b.dataset.choix; })[0], sens = nb(o.montant) > 0 ? 'vente' : 'achat';
     var cand = factures.filter(function (f) { return f.sens === sens; });
-    var m = modale('Relier l\'opération', '<p class="small" style="margin:0">' + esc(dateFr(o.date) + ' · ' + o.libelle + ' · ' + eur(Math.abs(nb(o.montant)))) + '</p><label class="f">Facture<select id="chF">' + cand.map(function (f) { return '<option value="' + esc(f.id) + '">' + esc((f.tiers || '—') + ' · ' + (f.numero || '') + ' · ' + dateFr(f.date) + ' · reste ' + eur(nb(f.reste))) + '</option>'; }).join('') + '</select></label><div class="row"><button class="btn primary" id="chOk"' + (cand.length ? '' : ' disabled') + '>Relier</button><button class="btn ghost" id="chX">Annuler</button></div>');
+    var m = modale('Relier l\'opération', '<p class="small" style="margin:0">' + esc(dateFr(o.date) + ' · ' + o.libelle + ' · ' + eur(Math.abs(nb(o.montant)))) + '</p><label class="f">Facture<select id="chF">' + cand.map(function (f) { return '<option value="' + esc(f.id) + '">' + esc((f.tiers || '—') + ' · ' + (f.numero || '') + ' · ' + dateFr(f.date) + ' · reste ' + eur(nb(f.reste))) + '</option>'; }).join('') + '</select></label>' + (sens === 'vente' ? '<label class="small" style="display:flex;gap:8px"><input type="checkbox" id="chC"> C\'est le versement de la prime CEE par la plateforme</label>' : '') + '<div class="row"><button class="btn primary" id="chOk"' + (cand.length ? '' : ' disabled') + '>Relier</button><button class="btn ghost" id="chX">Annuler</button></div>');
     $('chX').onclick = function () { m.fermer(); };
-    $('chOk').onclick = function () { lier(o.id, $('chF').value).then(function () { m.remove(); ouvrir('factures'); }).catch(echec); };
+    $('chOk').onclick = function () { lier(o.id, $('chF').value, $('chC') && $('chC').checked).then(function () { m.remove(); ouvrir('factures'); }).catch(echec); };
   }; });
   if ($('bqAuto')) $('bqAuto').onclick = function () {
     var b = $('bqAuto'); b.disabled = true; var s = Promise.resolve(), n = 0;
     sures.forEach(function (o) { s = s.then(function () { return lier(o.id, sugg[o.id][0].f.id, sugg[o.id][0].cee).then(function () { n++; b.textContent = 'Rapprochement… ' + n + '/' + sures.length; }); }); });
     s.then(function () { toast(n + ' opération(s) rapprochée(s).'); ouvrir('factures'); }).catch(echec);
   };
+  if ($('bqClasse')) $('bqClasse').onclick = function () {
+    var b = $('bqClasse'); b.disabled = true; var s = Promise.resolve(), n = 0;
+    aClasser.forEach(function (o) { s = s.then(function () { return call('save', { table: 'Banque', row: { id: o.id, compte: classe[o.id].compte } }).then(function () { n++; b.textContent = 'Classement… ' + n + '/' + aClasser.length; }); }); });
+    s.then(function () { toast(n + ' opération(s) classée(s). Vérifiez-les dans la liste.'); ouvrir('factures'); }).catch(echec);
+  };
   $('bqCsv').onclick = function () {
-    telechargerCsv('releves-' + libPeriode(P).replace(/\s/g, '-') + '.csv', ['Date', 'Libellé', 'Crédit', 'Débit', 'Facture rapprochée', 'Client / fournisseur', 'Relevé'],
-      l.map(function (o) { var f = parId[o.factureId], v = nb(o.montant); return [o.date, o.libelle, v > 0 ? v : '', v < 0 ? -v : '', f ? f.numero || '' : '', f ? f.tiers : '', o.releve]; }));
+    telechargerCsv('releves-' + libPeriode(P).replace(/\s/g, '-') + '.csv', ['Date', 'Libellé', 'Crédit', 'Débit', 'Facture rapprochée', 'Client / fournisseur', 'Compte', 'Libellé du compte', 'Relevé'],
+      l.map(function (o) { var f = parId[o.factureId], v = nb(o.montant); return [o.date, o.libelle, v > 0 ? v : '', v < 0 ? -v : '', f ? f.numero || '' : '', f ? f.tiers : '', o.compte || '', o.compte ? CPT.libelle(o.compte) : '', o.releve]; }));
   };
 }
 
-/* ---------- TVA et encaissements de la période ---------- */
-function vueTva(factures, ops, P) {
-  var ventes = factures.filter(function (f) { return f.sens === 'vente'; }), achats = factures.filter(function (f) { return f.sens === 'achat'; });
-  var parTaux = function (liste, filtre) { var t = {}; liste.forEach(function (f) { if (!filtre(f)) return; (f.lignesTva || []).forEach(function (x) { var k = String(nb(x.taux)); t[k] = t[k] || { base: 0, tva: 0 }; t[k].base += nb(x.base); t[k].tva += nb(x.montant); }); }); return t; };
-  var factPeriode = function (f) { return periodeOk(f.date, P); };
-  var facturee = parTaux(ventes, factPeriode), deductible = parTaux(achats, factPeriode);
-  // TVA comprise dans les encaissements de la période (règle des prestations de services : TVA due à l'encaissement)
-  var encT = {}, encList = [];
-  ventes.forEach(function (f) {
-    var ttc = nb(f.ttc), tvaTot = tvaDe(f);
-    var liste = (f.encaissements || []).slice();
-    if (nb(f.cee) && f.ceeRecue) liste.push({ date: f.ceeRecue, montant: nb(f.cee), mode: 'Prime CEE (plateforme)', origine: 'cee' });
-    liste.forEach(function (e) {
-      if (!periodeOk(e.date, P)) return;
-      encList.push({ date: e.date, f: f, e: e });
-      if (!ttc || !tvaTot) return;
-      (f.lignesTva || []).forEach(function (x) { var k = String(nb(x.taux)); encT[k] = encT[k] || { base: 0, tva: 0 }; var part = nb(e.montant) * nb(x.montant) / ttc; encT[k].tva += part; encT[k].base += part * 100 / (nb(x.taux) || 1); });
-    });
-  });
-  encList.sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
-  var tableTaux = function (t, titre) { var ks = Object.keys(t).sort(function (a, b) { return b - a; }); var tb = ks.reduce(function (s, k) { return s + t[k].base; }, 0), tv = ks.reduce(function (s, k) { return s + t[k].tva; }, 0); return '<div class="card"><span class="tag">' + titre + '</span>' + (ks.length ? '<table><thead><tr><th>Taux</th><th style="text-align:right">Base HT</th><th style="text-align:right">TVA</th></tr></thead><tbody>' + ks.map(function (k) { return '<tr><td>' + k.replace('.', ',') + ' %</td><td style="text-align:right">' + eur(t[k].base) + '</td><td style="text-align:right">' + eur(t[k].tva) + '</td></tr>'; }).join('') + '<tr><td><b>Total</b></td><td style="text-align:right"><b>' + eur(tb) + '</b></td><td style="text-align:right"><b>' + eur(tv) + '</b></td></tr></tbody></table>' : '<span class="muted small">Rien sur la période.</span>') + '</div>'; };
-  var tvEnc = Object.keys(encT).reduce(function (s, k) { return s + encT[k].tva; }, 0), tvDed = Object.keys(deductible).reduce(function (s, k) { return s + deductible[k].tva; }, 0);
-  var attente = ventes.filter(function (f) { return nb(f.reste) > 0.005; });
-  var ceeAttente = ventes.filter(function (f) { return nb(f.cee) > 0 && !f.ceeRecue; });
-  var h = '<p class="muted small" style="margin:0">Période : <b>' + esc(libPeriode(P)) + '</b>. Pour des travaux (prestations de services), la TVA est due à l\'encaissement : la TVA « encaissée » est calculée au prorata de chaque encaissement. Estimation à faire valider par votre comptable.</p>' +
-    '<div class="grid">' + tableTaux(facturee, 'TVA facturée (factures de la période)') + tableTaux(encT, 'TVA comprise dans les encaissements') + tableTaux(deductible, 'TVA déductible (achats de la période)') + '</div>' +
-    '<div class="card"><span class="tag">Estimation TVA à reverser sur la période</span><b style="font-size:24px">' + eur(tvEnc - tvDed) + '</b><span class="muted small">TVA encaissée ' + eur(tvEnc) + ' − TVA déductible ' + eur(tvDed) + '</span></div>' +
-    '<div class="head" style="border-bottom-width:1px"><h2 style="font-size:20px">Encaissements de la période</h2><span class="meta">' + eur(encList.reduce(function (s, x) { return s + nb(x.e.montant); }, 0)) + '</span></div>' +
-    (encList.length ? '<div class="tablewrap"><table><thead><tr><th>Date</th><th>Client</th><th>Facture</th><th>Mode</th><th style="text-align:right">Montant</th></tr></thead><tbody>' + encList.map(function (x) { return '<tr><td class="small">' + esc(dateFr(x.date)) + '</td><td>' + esc(x.f.tiers) + '</td><td class="small">' + esc(x.f.numero) + '</td><td class="small">' + esc(x.e.mode) + (x.e.origine === 'banque' ? ' · relevé' : '') + '</td><td style="text-align:right">' + eur(nb(x.e.montant)) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">Aucun encaissement sur la période.</div>') +
-    '<div class="head" style="border-bottom-width:1px"><h2 style="font-size:20px">En attente d\'encaissement</h2><span class="meta">' + eur(attente.reduce(function (s, f) { return s + nb(f.reste); }, 0)) + ' au total</span></div>' +
-    (ceeAttente.length ? '<div class="card"><span class="tag">Primes CEE à recevoir de la plateforme</span><b>' + eur(ceeAttente.reduce(function (s, f) { return s + nb(f.cee); }, 0)) + '</b><span class="small">' + ceeAttente.map(function (f) { return esc(f.tiers + (f.numero ? ' (' + f.numero + ')' : '') + ' : ' + eur(nb(f.cee))); }).join(' · ') + '</span></div>' : '') +
-    (attente.length ? '<div class="tablewrap"><table><thead><tr><th>Client</th><th>Facture</th><th>Date</th><th style="text-align:right">Net à payer</th><th style="text-align:right">Encaissé</th><th style="text-align:right">Reste</th></tr></thead><tbody>' + attente.map(function (f) { return '<tr><td>' + esc(f.tiers) + '</td><td class="small">' + esc(f.numero) + '</td><td class="small">' + esc(dateFr(f.date)) + '</td><td style="text-align:right">' + eur(netDe(f)) + '</td><td style="text-align:right">' + eur(encaisse(f)) + '</td><td style="text-align:right"><b>' + eur2(f.reste) + '</b></td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">Tout est encaissé.</div>') +
-    '<div class="row"><button class="btn ghost small" id="tvCsv">Exporter la synthèse TVA (CSV)</button></div>';
+/* ---------- Déclaration de TVA (TVA sur les encaissements) ---------- */
+var REGIMES_TVA = { CA3M: 'CA3 mensuelle (réel normal)', CA3T: 'CA3 trimestrielle (réel normal, moins de 4 000 € de TVA par an)', CA12: 'CA12 annuelle (réel simplifié)' };
+function vueTva(D, P) {
+  var regime = D.prm.societe.regimeTva || 'CA3M', pers = CPT.periodes(regime, P.annee, D.prm), auj = isoJour(new Date());
+  var choix = S.cache.faTva && pers.some(function (p) { return p.cle === S.cache.faTva; }) ? S.cache.faTva : (pers.filter(function (p) { return p.au < auj; }).pop() || pers[0]).cle;
+  var per = pers.filter(function (p) { return p.cle === choix; })[0], T = CPT.declaration(D, D.prm, per);
+  var ligne = function (code, lib, base, tva, fort) { return '<tr' + (fort ? ' style="font-weight:700"' : '') + '><td>' + code + '</td><td>' + lib + '</td><td style="text-align:right">' + (base === null ? '' : eur(base, 0)) + '</td><td style="text-align:right">' + (tva === null ? '' : eur(tva)) + '</td></tr>'; };
+  var h = '<div class="card"><div class="fgrid"><label class="f">Période à déclarer<select id="tvP">' + pers.map(function (p) { return '<option value="' + p.cle + '"' + (p.cle === choix ? ' selected' : '') + '>' + esc(p.lib) + '</option>'; }).join('') + '</select></label>' +
+    '<div><span class="tag">Régime</span><div>' + esc(REGIMES_TVA[regime]) + ' · TVA sur les encaissements</div><span class="muted small">À changer dans Réglages.</span></div></div>' +
+    '<p class="muted small" style="margin:0">La TVA collectée n\'est comptée que sur les encaissements retrouvés sur un relevé de compte (ou payés en espèces). La TVA des achats de biens est déductible à la date de la facture, celle des services au paiement. Les montants de base sont arrondis à l\'euro comme sur le formulaire. Estimation à faire valider par votre comptable avant la déclaration.</p></div>' +
+    (T.aValider.length ? '<div class="card" style="border-color:var(--warn)"><span class="tag" style="color:var(--warn)">' + T.aValider.length + ' paiement(s) pas encore retrouvé(s) sur un relevé : non comptés</span><div class="tablewrap"><table><tbody>' + T.aValider.map(function (x) { return '<tr><td class="small">' + esc(dateFr(x.e.date)) + '</td><td>' + (x.sens === 'vente' ? 'Encaissement' : 'Règlement') + ' · ' + esc(x.f.tiers) + ' <span class="muted small">' + esc(x.f.numero) + '</span></td><td class="small">' + esc(x.e.mode || '') + '</td><td style="text-align:right">' + eur(nb(x.e.montant)) + '</td></tr>'; }).join('') + '</tbody></table></div><span class="small">Importez le relevé du mois puis rapprochez ces paiements (onglet Relevés de compte).</span></div>' : '') +
+    '<div class="tablewrap"><table><thead><tr><th>Ligne</th><th>Formulaire ' + (regime === 'CA12' ? 'CA12 (correspondance indicative)' : '3310-CA3') + '</th><th style="text-align:right">Base HT</th><th style="text-align:right">TVA</th></tr></thead><tbody>' +
+    '<tr><td colspan="4" class="tag">A · Montant des opérations réalisées</td></tr>' +
+    ligne('A1', 'Ventes, prestations de services', Math.round(T.a1), null) +
+    (T.a2 ? ligne('A2', 'Autres opérations imposables (travaux de sous-traitants en autoliquidation)', Math.round(T.a2), null) : '') +
+    (T.e2 ? ligne('E2', 'Autres opérations non imposables (dont travaux facturés en autoliquidation)', Math.round(T.e2), null) : '') +
+    '<tr><td colspan="4" class="tag">B · Décompte de la TVA</td></tr>' +
+    T.lignes.map(function (x) { return ligne(x.code, x.lib, Math.round(x.base), x.tva); }).join('') +
+    ligne('16', 'Total de la TVA brute due', null, T.l16, true) +
+    ligne('19', 'TVA déductible : biens constituant des immobilisations', null, T.d19) +
+    ligne('20', 'TVA déductible : autres biens et services', null, T.d20) +
+    ligne('22', 'Report du crédit de la déclaration précédente', null, T.l22) +
+    ligne('23', 'Total de la TVA déductible', null, T.l23, true) +
+    (T.l28 ? ligne('28', 'TVA nette due', null, T.l28, true) : ligne('25 / 27', 'Crédit de TVA (à reporter)', null, T.l25, true)) +
+    '</tbody></table></div>' +
+    '<div class="card"><span class="tag">' + (T.l28 ? 'À payer pour ' + esc(per.lib) : 'Crédit de TVA pour ' + esc(per.lib)) + '</span><b style="font-size:26px">' + eur(T.l28 || T.l25) + '</b><span class="muted small">' + (regime === 'CA12' ? 'Déclaration annuelle CA12 à déposer début mai pour un exercice clos au 31 décembre.' : 'À déclarer et payer le mois suivant, à la date indiquée dans votre espace professionnel sur impots.gouv.fr.') + (T.autoliqTva ? ' Dont ' + eur(T.autoliqTva) + ' de TVA autoliquidée (due et déductible).' : '') + '</span></div>';
+  if (regime === 'CA12') { var ac = CPT.acomptesCa12(D, D.prm, P.annee); h += '<div class="card"><span class="tag">Acomptes ' + esc(P.annee) + ' (régime simplifié)</span>' + (ac.juillet ? '<span>Juillet : <b>' + eur(ac.juillet) + '</b> · Décembre : <b>' + eur(ac.decembre) + '</b></span><span class="muted small">55 % et 40 % de la TVA due en ' + (+P.annee - 1) + ' (' + eur(ac.base) + '), hors TVA sur immobilisations. À déduire sur la CA12.</span>' : '<span class="muted small">Pas d\'acompte : TVA due l\'année précédente inférieure à 1 000 €.</span>') + '</div>'; }
+  h += '<details class="card"><summary><b>Détail de la TVA collectée (' + T.detailsCollecte.length + ' encaissement(s))</b></summary><div class="tablewrap"><table><tbody>' + T.detailsCollecte.map(function (x) { return '<tr><td class="small">' + esc(dateFr(x.e.date)) + '</td><td>' + esc(x.f.tiers) + ' <span class="muted small">' + esc(x.f.numero) + '</span></td><td class="small">' + esc(x.e.mode || '') + (x.e.origine === 'banque' ? ' · relevé ✓' : '') + '</td><td class="small">' + (x.f.lignesTva || []).map(function (t) { return String(t.taux).replace('.', ',') + ' %'; }).join(' + ') + (x.f.autoliq === 'oui' ? 'autoliquidation' : '') + '</td><td style="text-align:right">' + eur(nb(x.e.montant)) + '</td></tr>'; }).join('') + '</tbody></table></div></details>' +
+    '<details class="card"><summary><b>Détail de la TVA déductible (' + T.detailsDeduc.length + ')</b></summary><div class="tablewrap"><table><tbody>' + T.detailsDeduc.map(function (x) { return '<tr><td class="small">' + esc(dateFr(x.e ? x.e.date : x.f.date)) + '</td><td>' + esc(x.f.tiers) + ' <span class="muted small">' + esc(x.f.numero) + '</span></td><td class="small">ligne ' + x.ligne + ' · ' + (x.e ? 'au paiement' : 'à la facture') + (nb(x.f.pctTva) && nb(x.f.pctTva) < 100 ? ' · ' + x.f.pctTva + ' %' : '') + '</td><td style="text-align:right">' + eur(x.montant) + '</td></tr>'; }).join('') + '</tbody></table></div></details>' +
+    '<div class="row"><button class="btn ghost small" id="tvCsv">Exporter la déclaration (CSV)</button><button class="btn ghost small" id="tvPrint">Imprimer</button></div>';
   $('faZone').innerHTML = h;
-  $('tvCsv').onclick = function () {
-    var lignes = [];
-    [['TVA facturée', facturee], ['TVA encaissée', encT], ['TVA déductible', deductible]].forEach(function (g) { Object.keys(g[1]).sort(function (a, b) { return b - a; }).forEach(function (k) { lignes.push([libPeriode(P), g[0], nb(k), g[1][k].base, g[1][k].tva]); }); });
-    lignes.push([libPeriode(P), 'Estimation TVA à reverser', '', '', tvEnc - tvDed]);
-    telechargerCsv('tva-' + libPeriode(P).replace(/\s/g, '-') + '.csv', ['Période', 'Rubrique', 'Taux %', 'Base HT', 'TVA'], lignes);
+  $('tvP').onchange = function () { S.cache.faTva = $('tvP').value; vueTva(D, P); };
+  var lignesCsv = function () {
+    var o = [['A1', 'Ventes, prestations de services', Math.round(T.a1), '']];
+    if (T.a2) o.push(['A2', 'Autres opérations imposables', Math.round(T.a2), '']);
+    if (T.e2) o.push(['E2', 'Autres opérations non imposables', Math.round(T.e2), '']);
+    T.lignes.forEach(function (x) { o.push([x.code, x.lib, Math.round(x.base), x.tva]); });
+    o.push(['16', 'Total TVA brute', '', T.l16], ['19', 'TVA déductible immobilisations', '', T.d19], ['20', 'TVA déductible autres biens et services', '', T.d20], ['22', 'Crédit reporté', '', T.l22], ['23', 'Total TVA déductible', '', T.l23], T.l28 ? ['28', 'TVA nette due', '', T.l28] : ['25', 'Crédit de TVA', '', T.l25]);
+    return o;
+  };
+  $('tvCsv').onclick = function () { telechargerCsv('tva-' + per.cle + '.csv', ['Ligne', 'Libellé', 'Base HT', 'TVA'], lignesCsv()); };
+  $('tvPrint').onclick = function () { imprimer('TVA ' + per.lib, '<h1>Déclaration de TVA · ' + esc(per.lib) + '</h1><p>' + esc(D.prm.societe.raisonSociale || '') + ' · ' + esc(REGIMES_TVA[regime]) + ' · TVA sur les encaissements</p><table><tr><th>Ligne</th><th>Libellé</th><th class="n">Base HT</th><th class="n">TVA</th></tr>' + lignesCsv().map(function (l) { return '<tr><td>' + l[0] + '</td><td>' + esc(l[1]) + '</td><td class="n">' + (l[2] === '' ? '' : eur(l[2], 0)) + '</td><td class="n">' + (l[3] === '' ? '' : eur(l[3])) + '</td></tr>'; }).join('') + '</table>'); };
+}
+
+/* ---------- Compte de résultat ---------- */
+function vueResultat(D, P) {
+  var ex = exerciceDe(P, D), exP = CPT.exercice(+ex.annee - 1, D.prm);
+  var cr = CPT.compteResultat(D.ecr, ex), crP = CPT.compteResultat(D.ecr, exP);
+  var aValider = D.factures.filter(function (f) { return f.verifie !== 'oui' && f.date >= ex.du && f.date <= ex.au; }).length;
+  var val = function (c, code) { var x = c.lignes.filter(function (l) { return l.code === code; })[0]; return x ? x.montant : 0; };
+  var ligne = function (l) {
+    var det = Object.keys(l.comptes).sort().map(function (c) { return '<tr class="small muted"><td></td><td style="padding-left:22px">' + esc(c + ' · ' + CPT.libelle(c)) + '</td><td style="text-align:right">' + eur(l.comptes[c]) + '</td><td></td></tr>'; }).join('');
+    return '<tr' + (det ? ' class="click" data-det="' + l.code + '"' : '') + '><td class="small">' + l.code + '</td><td>' + esc(l.lib) + (det ? ' <span class="muted small">▸</span>' : '') + '</td><td style="text-align:right">' + eur(l.montant) + '</td><td style="text-align:right" class="muted">' + eur(val(crP, l.code)) + '</td></tr>' + (det ? '<tbody class="det" id="det' + l.code + '" hidden>' + det + '</tbody><tbody>' : '');
+  };
+  var tot = function (lib, a, b, fort) { return '<tr style="font-weight:700;background:var(--surface-2)"><td></td><td>' + lib + '</td><td style="text-align:right' + (fort ? ';color:' + (a >= 0 ? 'var(--ok)' : 'var(--ko)') : '') + '">' + eur(a) + '</td><td style="text-align:right" class="muted">' + eur(b) + '</td></tr>'; };
+  var L = cr.lignes, prod = L.filter(function (l) { return l.type === 'P'; }), chg = L.filter(function (l) { return l.type === 'C'; }), aut = L.filter(function (l) { return !/^(P|C)$/.test(l.type); });
+  var h = alertesCompta(D, ex, aValider) +
+    '<div class="tablewrap"><table><thead><tr><th>Réf. 2033-B</th><th>Compte de résultat · ' + esc(libEx(ex)) + '</th><th style="text-align:right">' + esc(ex.annee) + '</th><th style="text-align:right">' + esc(exP.annee) + '</th></tr></thead><tbody>' +
+    '<tr><td colspan="4" class="tag">Produits d\'exploitation</td></tr>' + prod.map(ligne).join('') + tot('Total des produits d\'exploitation (232)', cr.produitsExploitation, crP.produitsExploitation) +
+    '<tr><td colspan="4" class="tag">Charges d\'exploitation</td></tr>' + chg.map(ligne).join('') + tot('Total des charges d\'exploitation (264)', cr.chargesExploitation, crP.chargesExploitation) +
+    tot('Résultat d\'exploitation (270)', cr.resultatExploitation, crP.resultatExploitation) +
+    aut.map(ligne).join('') + tot('Bénéfice ou perte (310)', cr.resultat, crP.resultat, true) + '</tbody></table></div>' +
+    '<p class="muted small">Cliquez sur une ligne pour voir le détail par compte. Les ventes sont comptées à la date de la facture (HT), les achats aussi ; les immobilisations sont amorties au prorata. Document préparatoire, à faire vérifier par votre expert-comptable.</p>' +
+    '<div class="row"><button class="btn ghost small" id="crCsv">Exporter (CSV)</button><button class="btn ghost small" id="crPrint">Imprimer</button><button class="btn ghost small" id="crFec">Écritures de l\'exercice (FEC)</button></div>';
+  $('faZone').innerHTML = h;
+  $('faZone').querySelectorAll('[data-det]').forEach(function (tr) { tr.onclick = function () { var b = $('det' + tr.dataset.det); b.hidden = !b.hidden; }; });
+  $('crCsv').onclick = function () { telechargerCsv('compte-de-resultat-' + ex.annee + '.csv', ['Réf. 2033-B', 'Rubrique', 'Compte', 'Libellé du compte', ex.annee, exP.annee], [].concat.apply([], L.map(function (l) { return [[l.code, l.lib, '', '', l.montant, val(crP, l.code)]].concat(Object.keys(l.comptes).sort().map(function (c) { return ['', '', c, CPT.libelle(c), l.comptes[c], '']; })); })).concat([['310', 'Bénéfice ou perte', '', '', cr.resultat, crP.resultat]])); };
+  $('crPrint').onclick = function () { imprimer('Compte de résultat ' + ex.annee, '<h1>Compte de résultat · ' + esc(libEx(ex)) + '</h1><p>' + esc(D.prm.societe.raisonSociale || '') + '</p>' + $('faZone').querySelector('table').outerHTML.replace(/ hidden/g, '')); };
+  $('crFec').onclick = function () { telechargerTexte(ficheFec(D, ex), CPT.fec(D.ecr, ex, D.prm)); };
+}
+function ficheFec(D, ex) { return String(D.prm.societe.siren || 'SIREN').replace(/\D/g, '') + 'FEC' + ex.au.replace(/-/g, '') + '.txt'; }
+function telechargerTexte(nom, texte) {
+  var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([texte], { type: 'text/plain;charset=utf-8' })); a.download = nom;
+  document.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); }, 1000);
+}
+/** Points à régler avant de remettre le dossier au comptable. */
+function alertesCompta(D, ex, aValider) {
+  var a = [], bi = CPT.bilan(D.ecr, ex);
+  if (!D.prm.ouverture.date) a.push('Le bilan d\'ouverture (ancien bilan) n\'est pas saisi : la banque, le capital et les dettes de départ manquent (Réglages).');
+  if (aValider) a.push(aValider + ' facture(s) de l\'exercice encore à valider.');
+  var nc = D.ops.filter(function (o) { return !o.factureId && !o.compte && o.date >= ex.du && o.date <= ex.au; }).length;
+  if (nc) a.push(nc + ' opération(s) bancaire(s) ni rapprochée(s) ni classée(s) : elles sont en compte d\'attente.');
+  var moisReleves = {}; D.ops.forEach(function (o) { moisReleves[String(o.date).slice(0, 7)] = 1; });
+  var manquants = []; for (var d = new Date(ex.du + 'T12:00:00'); isoJour(d) <= ex.au && isoJour(d) <= isoJour(new Date()); d.setMonth(d.getMonth() + 1)) { var k = isoJour(d).slice(0, 7); if (!moisReleves[k]) manquants.push(new Date(k + '-15').toLocaleDateString('fr-FR', { month: 'short' })); }
+  if (manquants.length && manquants.length < 13) a.push('Relevés de compte absents pour : ' + manquants.join(', ') + '.');
+  if (D.prm.stocks[ex.annee] === undefined && ex.au <= isoJour(new Date())) a.push('Stock de fin d\'exercice non saisi (Immobilisations et écritures).');
+  if (bi.ecart) a.push('Le bilan n\'est pas équilibré (écart de ' + eur(bi.ecart) + ') : vérifiez le bilan d\'ouverture.');
+  return a.length ? '<div class="card" style="border-color:var(--warn)"><span class="tag" style="color:var(--warn)">À compléter avant de remettre le dossier</span><ul class="small" style="margin:0;padding-left:18px">' + a.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' : '<div class="card" style="border-color:var(--ok)"><span class="tag" style="color:var(--ok)">Dossier complet pour cet exercice</span></div>';
+}
+
+/* ---------- Bilan ---------- */
+function vueBilan(D, P) {
+  var ex = exerciceDe(P, D), bi = CPT.bilan(D.ecr, ex), biP = CPT.bilan(D.ecr, CPT.exercice(+ex.annee - 1, D.prm));
+  var netP = function (cote, l) { var x = biP[cote].filter(function (y) { return y.lib === l.lib; })[0]; return x ? x.net : 0; };
+  var det = function (l, id) { var ks = Object.keys(l.comptes).sort(); return ks.length ? '<tbody class="det" id="' + id + '" hidden>' + ks.map(function (c) { return '<tr class="small muted"><td></td><td style="padding-left:22px">' + esc(/^\(/.test(c) ? c : c + ' · ' + CPT.libelle(c)) + '</td><td colspan="2"></td><td style="text-align:right">' + eur(l.comptes[c]) + '</td><td></td></tr>'; }).join('') + '</tbody><tbody>' : ''; };
+  var vide = function (cote, l) { return !l.net && !netP(cote, l) && !l.brut; };
+  var ligneA = function (l, i) { if (vide('actif', l)) return ''; var id = 'bA' + i, d = det(l, id); return '<tr' + (d ? ' class="click" data-det="' + id + '"' : '') + '><td class="small">' + l.code + '</td><td>' + esc(l.lib) + (d ? ' <span class="muted small">▸</span>' : '') + '</td><td style="text-align:right">' + (l.amort ? eur(l.brut) : '') + '</td><td style="text-align:right">' + (l.amort ? eur(l.amort) : '') + '</td><td style="text-align:right"><b>' + eur(l.net) + '</b></td><td style="text-align:right" class="muted">' + eur(netP('actif', l)) + '</td></tr>' + d; };
+  var ligneP = function (l, i) { if (vide('passif', l) && !/^(120|136)$/.test(l.code)) return ''; var id = 'bP' + i, d = det(l, id); return '<tr' + (d ? ' class="click" data-det="' + id + '"' : '') + '><td class="small">' + l.code + '</td><td>' + esc(l.lib) + (d ? ' <span class="muted small">▸</span>' : '') + '</td><td colspan="2"></td><td style="text-align:right"><b>' + eur(l.net) + '</b></td><td style="text-align:right" class="muted">' + eur(netP('passif', l)) + '</td></tr>' + d; };
+  var aValider = D.factures.filter(function (f) { return f.verifie !== 'oui' && f.date >= ex.du && f.date <= ex.au; }).length;
+  var tete = '<thead><tr><th>Réf. 2033-A</th><th></th><th style="text-align:right">Brut</th><th style="text-align:right">Amort.</th><th style="text-align:right">Net ' + esc(ex.annee) + '</th><th style="text-align:right">' + (+ex.annee - 1) + '</th></tr></thead>';
+  var h = alertesCompta(D, ex, aValider) +
+    '<div class="grid"><div class="card"><span class="tag">Capitaux propres au ' + esc(dateFr(ex.au)) + '</span><b style="font-size:22px">' + eur(bi.capitauxPropres, 0) + '</b></div><div class="card"><span class="tag">Résultat de l\'exercice</span><b style="font-size:22px;color:' + (bi.resultat >= 0 ? 'var(--ok)' : 'var(--ko)') + '">' + eur(bi.resultat, 0) + '</b></div><div class="card"><span class="tag">Équilibre</span><b style="font-size:22px;color:' + (bi.ecart ? 'var(--ko)' : 'var(--ok)') + '">' + (bi.ecart ? 'écart ' + eur(bi.ecart) : 'Actif = passif') + '</b></div></div>' +
+    '<div class="tablewrap"><table>' + tete + '<tbody><tr><td colspan="6" class="tag">Actif</td></tr>' + bi.actif.map(ligneA).join('') +
+    '<tr style="font-weight:700;background:var(--surface-2)"><td class="small">110</td><td>Total de l\'actif</td><td colspan="2"></td><td style="text-align:right">' + eur(bi.totalActif) + '</td><td style="text-align:right" class="muted">' + eur(biP.totalActif) + '</td></tr>' +
+    '<tr><td colspan="6" class="tag">Passif</td></tr>' + bi.passif.map(ligneP).join('') +
+    '<tr style="font-weight:700;background:var(--surface-2)"><td class="small">180</td><td>Total du passif</td><td colspan="2"></td><td style="text-align:right">' + eur(bi.totalPassif) + '</td><td style="text-align:right" class="muted">' + eur(biP.totalPassif) + '</td></tr></tbody></table></div>' +
+    '<p class="muted small">Les rubriques à zéro ne sont pas affichées (elles figurent dans l\'export). Bilan au ' + esc(dateFr(ex.au)) + ', calculé à partir du bilan d\'ouverture, des factures, des relevés, des immobilisations et des écritures diverses. Cliquez sur une ligne pour le détail. Document préparatoire : l\'expert-comptable établit et dépose la liasse officielle.</p>' +
+    '<div class="row"><button class="btn ghost small" id="biCsv">Exporter (CSV)</button><button class="btn ghost small" id="biPrint">Imprimer</button><button class="btn ghost small" id="biFec">Écritures de l\'exercice (FEC)</button><button class="btn ghost small" id="biGl">Grand livre (CSV)</button></div>';
+  $('faZone').innerHTML = h;
+  $('faZone').querySelectorAll('[data-det]').forEach(function (tr) { tr.onclick = function () { var b = $(tr.dataset.det); b.hidden = !b.hidden; }; });
+  $('biCsv').onclick = function () { telechargerCsv('bilan-' + ex.annee + '.csv', ['Côté', 'Réf. 2033-A', 'Rubrique', 'Brut', 'Amortissements', 'Net ' + ex.annee, 'Net ' + (+ex.annee - 1)], bi.actif.map(function (l) { return ['Actif', l.code, l.lib, l.brut, l.amort, l.net, netP('actif', l)]; }).concat([['Actif', '110', 'Total', '', '', bi.totalActif, biP.totalActif]]).concat(bi.passif.map(function (l) { return ['Passif', l.code, l.lib, '', '', l.net, netP('passif', l)]; })).concat([['Passif', '180', 'Total', '', '', bi.totalPassif, biP.totalPassif]])); };
+  $('biPrint').onclick = function () { imprimer('Bilan ' + ex.annee, '<h1>Bilan au ' + esc(dateFr(ex.au)) + '</h1><p>' + esc(D.prm.societe.raisonSociale || '') + '</p>' + $('faZone').querySelector('table').outerHTML.replace(/ hidden/g, '')); };
+  $('biFec').onclick = function () { telechargerTexte(ficheFec(D, ex), CPT.fec(D.ecr, ex, D.prm)); };
+  $('biGl').onclick = function () { telechargerCsv('grand-livre-' + ex.annee + '.csv', ['Date', 'Journal', 'Pièce', 'Compte', 'Libellé du compte', 'Libellé', 'Débit', 'Crédit'], grandLivre(D, ex)); };
+}
+function grandLivre(D, ex) {
+  var o = [];
+  D.ecr.forEach(function (e) { if (e.date < ex.du || e.date > ex.au) return; e.l.forEach(function (x) { o.push([e.date, e.j, e.piece, x.c, CPT.libelle(x.c), e.lib, x.m > 0 ? x.m : '', x.m < 0 ? -x.m : '']); }); });
+  o.sort(function (a, b) { return a[3] < b[3] ? -1 : a[3] > b[3] ? 1 : a[0] < b[0] ? -1 : 1; });
+  return o;
+}
+
+/* ---------- Immobilisations, stock et écritures diverses (IK, salaires, emprunts, IS…) ---------- */
+var MODELES_OD = [
+  ['ik', 'Indemnités kilométriques du dirigeant', '6251', '455', 'Montant du barème kilométrique pour l\'année (tableau des trajets). Dû au dirigeant : compte courant.'],
+  ['salaires', 'Salaires bruts (bulletins de paie)', '641', '421', 'Total des salaires bruts. Le virement des salaires nets se classe en 421 dans les relevés.'],
+  ['charges', 'Charges sociales (bulletins de paie)', '645', '431', 'Charges patronales et salariales. Le prélèvement URSSAF se classe en 431 ou 645.'],
+  ['dirigeant', 'Rémunération du dirigeant', '644', '455', 'Rémunération décidée pour le dirigeant, versée ou portée en compte courant.'],
+  ['interets', 'Intérêts d\'emprunt de l\'année (tableau d\'amortissement du prêt)', '661', '164', 'Les échéances de prêt sont classées en 164 dans les relevés ; on sort ici la part d\'intérêts.'],
+  ['assurancePret', 'Assurance de l\'emprunt de l\'année', '616', '164', 'Part d\'assurance comprise dans les échéances du prêt.'],
+  ['perso', 'Dépense payée personnellement par le dirigeant (sans facture)', '6068', '455', 'À rembourser au dirigeant : compte courant.'],
+  ['cca', 'Charge payée d\'avance (part de l\'année suivante)', '486', '616', 'Exemple : assurance payée pour 12 mois à cheval sur deux exercices.'],
+  ['is', 'Impôt sur les sociétés de l\'exercice', '695', '444', 'Montant calculé par le comptable.'],
+  ['libre', 'Autre écriture', '', '', 'Choisissez le compte débité et le compte crédité.']
+];
+function vueImmos(D, P, gestion) {
+  var ex = exerciceDe(P, D);
+  var lignesIm = D.immos.map(function (im) {
+    var debut = CPT.cumulAmort(im, CPT.jour(ex.du, -1)), fin = CPT.cumulAmort(im, ex.au);
+    return { im: im, dot: fin - debut, cumul: fin, vnc: nb(im.valeur) - fin };
+  });
+  var ods = D.ods.filter(function (o) { return o.date >= ex.du && o.date <= ex.au; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  var stock = D.prm.stocks[ex.annee];
+  var h = '<div class="head" style="border-bottom-width:1px"><h2 style="font-size:20px">Immobilisations · tableau d\'amortissement</h2>' + (gestion ? '<button class="btn primary small" id="imAdd">Ajouter</button>' : '') + '</div>' +
+    '<p class="muted small" style="margin:0">Matériel durable de plus de 500 € HT (machines, véhicules, informatique…). Celles achetées avec une facture validée s\'ajoutent toutes seules ; reprenez ici celles de l\'ancien tableau d\'amortissement.</p>' +
+    (lignesIm.length ? '<div class="tablewrap"><table><thead><tr><th>Bien</th><th>Compte</th><th>Acquis le</th><th style="text-align:right">Valeur HT</th><th>Durée</th><th style="text-align:right">Dotation ' + esc(ex.annee) + '</th><th style="text-align:right">Amortissements cumulés</th><th style="text-align:right">Valeur nette</th></tr></thead><tbody>' +
+      lignesIm.map(function (x) { return '<tr class="click" data-im="' + esc(x.im.id) + '"><td><b>' + esc(x.im.libelle || '—') + '</b>' + (x.im.dateCession ? '<br><span class="pill">cédé le ' + esc(dateFr(x.im.dateCession)) + '</span>' : '') + '</td><td class="small">' + esc(x.im.compte + ' · ' + CPT.libelle(x.im.compte)) + '</td><td class="small">' + esc(dateFr(x.im.dateAcq)) + '</td><td style="text-align:right">' + eur2(x.im.valeur) + '</td><td class="small">' + (nb(x.im.duree) ? x.im.duree + ' ans' : '<span class="pill warn">à préciser</span>') + '</td><td style="text-align:right">' + eur(x.dot) + '</td><td style="text-align:right">' + eur(x.cumul) + '</td><td style="text-align:right"><b>' + eur(x.vnc) + '</b></td></tr>'; }).join('') +
+      '<tr style="font-weight:700;background:var(--surface-2)"><td colspan="5">Total</td><td style="text-align:right">' + eur(lignesIm.reduce(function (s, x) { return s + x.dot; }, 0)) + '</td><td style="text-align:right">' + eur(lignesIm.reduce(function (s, x) { return s + x.cumul; }, 0)) + '</td><td style="text-align:right">' + eur(lignesIm.reduce(function (s, x) { return s + x.vnc; }, 0)) + '</td></tr></tbody></table></div>' : '<div class="empty">Aucune immobilisation.</div>') +
+    '<div class="card"><span class="tag">Stock de matériaux au ' + esc(dateFr(ex.au)) + '</span><div class="row"><input id="stV" inputmode="decimal" value="' + esc(stock === undefined ? '' : stock) + '" placeholder="valeur HT de l\'inventaire" style="max-width:220px;padding:8px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2)"' + (gestion ? '' : ' disabled') + '>' + (gestion ? '<button class="btn ghost small" id="stOk">Enregistrer</button>' : '') + '</div><span class="muted small">Isolants, billes, ouate… restant en dépôt à la clôture (inventaire). Laissez vide s\'il n\'y a pas de stock.</span></div>' +
+    '<div class="head" style="border-bottom-width:1px"><h2 style="font-size:20px">Écritures diverses · ' + esc(libEx(ex)) + '</h2>' + (gestion ? '<button class="btn primary small" id="odAdd">Ajouter</button>' : '') + '</div>' +
+    '<p class="muted small" style="margin:0">Ce qui ne passe ni par une facture ni par la banque : indemnités kilométriques, salaires des bulletins, intérêts d\'emprunt, dépenses payées personnellement, impôt sur les sociétés…</p>' +
+    (ods.length ? '<div class="tablewrap"><table><thead><tr><th>Date</th><th>Libellé</th><th>Débit</th><th>Crédit</th><th style="text-align:right">Montant</th></tr></thead><tbody>' + ods.map(function (o) { return '<tr class="click" data-od="' + esc(o.id) + '"><td class="small">' + esc(dateFr(o.date)) + '</td><td>' + esc(o.libelle) + (o.pieceId ? ' <span class="pill">pièce jointe</span>' : '') + '</td><td class="small">' + esc(o.debit + ' · ' + CPT.libelle(o.debit)) + '</td><td class="small">' + esc(o.credit + ' · ' + CPT.libelle(o.credit)) + '</td><td style="text-align:right">' + eur2(o.montant) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">Aucune écriture diverse sur cet exercice.</div>');
+  $('faZone').innerHTML = h;
+  if ($('imAdd')) $('imAdd').onclick = function () { formImmo({}, D); };
+  $('faZone').querySelectorAll('[data-im]').forEach(function (tr) { tr.onclick = function () { formImmo(D.immos.filter(function (i) { return i.id === tr.dataset.im; })[0], D, gestion); }; });
+  if ($('odAdd')) $('odAdd').onclick = function () { formOd({ date: ex.au }, D); };
+  $('faZone').querySelectorAll('[data-od]').forEach(function (tr) { tr.onclick = function () { formOd(D.ods.filter(function (o) { return o.id === tr.dataset.od; })[0], D, gestion); }; });
+  if ($('stOk')) $('stOk').onclick = function () { var s = Object.assign({}, D.prm.stocks), v = $('stV').value.trim(); if (v === '') delete s[ex.annee]; else s[ex.annee] = String(nb(v)); sauverParam(D, 'stocks', s).then(function () { toast('Stock enregistré.'); ouvrir('factures'); }).catch(echec); };
+}
+function formImmo(im, D, gestion) {
+  gestion = gestion !== false;
+  var dis = gestion ? '' : ' disabled';
+  var m = modale(im.id ? 'Immobilisation' : 'Nouvelle immobilisation', '<form id="imF" style="display:grid;gap:10px"><label class="f">Désignation<input name="libelle" maxlength="200" value="' + esc(im.libelle) + '" required' + dis + '></label>' +
+    '<div class="fgrid"><label class="f">Compte<select name="compte" id="imC"' + dis + '>' + optionsComptes(im.compte || '2154', function (c) { return /^2/.test(c); }) + '</select></label><label class="f">Date d\'acquisition (mise en service)<input type="date" name="dateAcq" value="' + esc(im.dateAcq) + '" required' + dis + '></label></div>' +
+    '<div class="fgrid"><label class="f">Valeur HT d\'achat<input name="valeur" inputmode="decimal" value="' + esc(im.valeur) + '" required' + dis + '></label><label class="f">Durée d\'amortissement (années)<input name="duree" id="imD" inputmode="numeric" value="' + esc(im.duree || CPT.DUREES[im.compte || '2154'] || 5) + '"' + dis + '></label></div>' +
+    '<div class="fgrid"><label class="f">Cédé ou mis au rebut le<input type="date" name="dateCession" value="' + esc(im.dateCession) + '"' + dis + '></label><label class="f">Note<input name="note" maxlength="300" value="' + esc(im.note) + '"' + dis + '></label></div>' +
+    '<p class="muted small" style="margin:0">Amortissement linéaire au prorata du temps. Durées usuelles : machines 5 à 10 ans, véhicules 4 à 5 ans, informatique 3 ans. Le prix de vente d\'un bien cédé se classe en 775 dans les relevés.</p>' +
+    '<div class="err" id="imErr"></div><div class="row">' + (gestion ? '<button class="btn primary">Enregistrer</button>' + (im.id ? '<button type="button" class="btn danger" id="imDel">Supprimer</button>' : '') : '') + '<button type="button" class="btn ghost" id="imX">Fermer</button></div></form>');
+  $('imX').onclick = function () { m.fermer(); };
+  if ($('imC')) $('imC').onchange = function () { if (CPT.DUREES[$('imC').value]) $('imD').value = CPT.DUREES[$('imC').value]; };
+  if ($('imDel')) $('imDel').onclick = function () { var b = $('imDel'); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Confirmer'; return; } call('remove', { table: 'Immobilisations', id: im.id }).then(function () { m.remove(); ouvrir('factures'); }).catch(echec); };
+  $('imF').onsubmit = function (ev) { ev.preventDefault(); var d = formData($('imF')); d.id = im.id || ''; d.factureId = im.factureId || ''; d.valeur = String(nb(d.valeur)); d.duree = String(nb(d.duree)); call('save', { table: 'Immobilisations', row: d }).then(function () { m.remove(); toast('Immobilisation enregistrée.'); ouvrir('factures'); }).catch(function (e) { $('imErr').textContent = e.message; }); };
+}
+function formOd(o, D, gestion) {
+  gestion = gestion !== false;
+  var dis = gestion ? '' : ' disabled';
+  var mod = MODELES_OD.filter(function (x) { return x[0] === o.type; })[0];
+  var m = modale(o.id ? 'Écriture diverse' : 'Nouvelle écriture diverse', '<form id="odF" style="display:grid;gap:10px">' +
+    '<label class="f">Modèle<select name="type" id="odT"' + dis + '>' + MODELES_OD.map(function (x) { return '<option value="' + x[0] + '"' + (o.type === x[0] ? ' selected' : '') + '>' + esc(x[1]) + '</option>'; }).join('') + '</select></label><p class="muted small" id="odAide" style="margin:0"></p>' +
+    '<div class="fgrid"><label class="f">Date<input type="date" name="date" value="' + esc(o.date) + '" required' + dis + '></label><label class="f">Montant<input name="montant" inputmode="decimal" value="' + esc(o.montant) + '" required' + dis + '></label></div>' +
+    '<label class="f">Libellé<input name="libelle" id="odL" maxlength="200" value="' + esc(o.libelle) + '"' + dis + '></label>' +
+    '<div class="fgrid"><label class="f">Compte débité<select name="debit" id="odD"' + dis + '><option value="">—</option>' + optionsComptes(o.debit) + '</select></label><label class="f">Compte crédité<select name="credit" id="odC"' + dis + '><option value="">—</option>' + optionsComptes(o.credit) + '</select></label></div>' +
+    '<label class="f">Justificatif (documents du bilan)<select name="pieceId"' + dis + '><option value="">—</option>' + D.pieces.map(function (p) { return '<option value="' + esc(p.id) + '"' + (p.id === o.pieceId ? ' selected' : '') + '>' + esc(p.exercice + ' · ' + (p.type || '') + ' · ' + (p.titre || p.nomFichier)) + '</option>'; }).join('') + '</select></label>' +
+    '<div class="err" id="odErr"></div><div class="row">' + (gestion ? '<button class="btn primary">Enregistrer</button>' + (o.id ? '<button type="button" class="btn danger" id="odDel">Supprimer</button>' : '') : '') + '<button type="button" class="btn ghost" id="odX">Fermer</button></div></form>');
+  var appliquer = function (force) { var x = MODELES_OD.filter(function (y) { return y[0] === $('odT').value; })[0]; $('odAide').textContent = x[4]; if (force && x[2]) { $('odD').value = x[2]; $('odC').value = x[3]; if (!$('odL').value) $('odL').value = x[1]; } };
+  if (!o.id && !o.type) { $('odT').value = 'ik'; appliquer(true); } else appliquer(false);
+  $('odT').onchange = function () { appliquer(true); };
+  $('odX').onclick = function () { m.fermer(); };
+  if ($('odDel')) $('odDel').onclick = function () { var b = $('odDel'); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Confirmer'; return; } call('remove', { table: 'OD', id: o.id }).then(function () { m.remove(); ouvrir('factures'); }).catch(echec); };
+  $('odF').onsubmit = function (ev) {
+    ev.preventDefault(); var d = formData($('odF')); d.id = o.id || ''; d.montant = String(nb(d.montant));
+    if (!d.debit || !d.credit || d.debit === d.credit) { $('odErr').textContent = 'Choisissez deux comptes différents.'; return; }
+    if (!nb(d.montant)) { $('odErr').textContent = 'Indiquez le montant.'; return; }
+    call('save', { table: 'OD', row: d }).then(function () { m.remove(); toast('Écriture enregistrée.'); ouvrir('factures'); }).catch(function (e) { $('odErr').textContent = e.message; });
   };
 }
+
+/* ---------- Documents du bilan ---------- */
+var TYPES_PIECES = [
+  ['Ancien bilan (liasse de l\'exercice précédent)', true], ['Tableau d\'amortissement des immobilisations', true], ['Tableau d\'amortissement des emprunts', false],
+  ['Contrats et attestations d\'assurance', true], ['Indemnités kilométriques (tableau des trajets, cartes grises)', false], ['Inventaire du stock à la clôture', false],
+  ['Bulletins de salaire et récapitulatif annuel', false], ['Déclarations de TVA déposées', true], ['Avis d\'imposition (CFE, impôt sur les sociétés)', false],
+  ['Contrats de location, crédit-bail, leasing', false], ['Relevés de compte (PDF de la banque)', false], ['Statuts, procès-verbaux d\'assemblée', false], ['Autre document', false]
+];
+function vueDocsBilan(D, P, gestion) {
+  var ex = exerciceDe(P, D), l = D.pieces.filter(function (p) { return String(p.exercice) === ex.annee; });
+  var parType = {}; l.forEach(function (p) { (parType[p.type] = parType[p.type] || []).push(p); });
+  var h = (gestion ? '<div class="card" id="pbImp" style="border-style:dashed;border-width:2px"><span class="tag">Déposer des documents pour l\'' + esc(libEx(ex)) + '</span><div class="fgrid"><label class="f">Type de document<select id="pbT">' + TYPES_PIECES.map(function (t) { return '<option>' + esc(t[0]) + '</option>'; }).join('') + '</select></label><label class="f">Titre (facultatif)<input id="pbN" maxlength="150" placeholder="ex. Assurance décennale SMABTP"></label></div><div class="row"><label class="btn primary upl">Choisir des fichiers<input type="file" multiple accept="application/pdf,image/*,.csv,.xlsx,.xls,.ods,.doc,.docx"></label><label class="btn ghost upl">Photographier<input type="file" accept="image/*" capture="environment"></label><span class="muted small">ou glissez-les ici</span></div><div class="imp small"></div></div>' : '') +
+    '<div class="tablewrap"><table><thead><tr><th>Document attendu</th><th>Déposé(s)</th></tr></thead><tbody>' + TYPES_PIECES.map(function (t) {
+      var ps = parType[t[0]] || [];
+      return '<tr><td>' + (ps.length ? '✓ ' : (t[1] ? '<span class="pill warn">à fournir</span> ' : '<span class="muted">si concerné · </span>')) + esc(t[0]) + '</td><td>' + ps.map(function (p) { return '<span class="row" style="gap:4px;display:inline-flex;margin:2px 6px 2px 0"><button class="btn ghost small" data-pb="' + esc(p.id) + '">' + esc(p.titre || p.nomFichier) + '</button>' + (gestion ? '<button class="btn danger small" data-pbx="' + esc(p.id) + '" title="Supprimer">✕</button>' : '') + '</span>'; }).join('') + '</td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    '<div class="card"><span class="tag">Dossier pour l\'expert-comptable</span><span class="small">Un fichier ZIP avec le compte de résultat, le bilan, le grand livre, les écritures au format FEC, la liste des factures, des immobilisations, des écritures diverses, la synthèse de TVA de chaque période, et tous les documents déposés ci-dessus.</span><div class="row"><button class="btn primary" id="pbZip">Télécharger le dossier ' + esc(ex.annee) + '</button><span class="muted small" id="pbZipInfo"></span></div></div>';
+  $('faZone').innerHTML = h;
+  $('faZone').querySelectorAll('[data-pb]').forEach(function (b) { b.onclick = function () { var p = D.pieces.filter(function (x) { return x.id === b.dataset.pb; })[0]; ouvrirDirect(p.fileId, p.nomFichier); }; });
+  $('faZone').querySelectorAll('[data-pbx]').forEach(function (b) { b.onclick = function () { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Confirmer'; return; } call('remove', { table: 'PiecesBilan', id: b.dataset.pbx }).then(function () { ouvrir('factures'); }).catch(echec); }; });
+  var z = $('pbImp');
+  if (z) {
+    var envoyer = function (files) {
+      var info = z.querySelector('.imp'), s = Promise.resolve(), fait = 0;
+      [].slice.call(files).forEach(function (f) {
+        var li = document.createElement('div'); li.textContent = '⏳ ' + f.name; info.appendChild(li);
+        s = s.then(function () { return lireFichier(f, /^image\//.test(f.type) ? 2200 : 0).then(function (x) { return call('upload', { table: 'PiecesBilan', base64: x.base64, nom: x.nom, mimeType: x.mimeType, meta: { exercice: ex.annee, type: $('pbT').value, titre: $('pbN').value } }); }).then(function () { li.textContent = '✓ ' + f.name; fait++; }, function (e) { li.textContent = '✗ ' + f.name + ' — ' + ((e && e.message) || 'échec'); li.style.color = 'var(--ko)'; }); });
+      });
+      s.then(function () { if (fait) setTimeout(function () { ouvrir('factures'); }, 700); });
+    };
+    z.querySelectorAll('input[type=file]').forEach(function (i) { i.onchange = function (e) { envoyer(e.target.files); }; });
+    z.addEventListener('dragover', function (e) { e.preventDefault(); z.style.borderColor = 'var(--gold)'; });
+    z.addEventListener('dragleave', function () { z.style.borderColor = ''; });
+    z.addEventListener('drop', function (e) { e.preventDefault(); z.style.borderColor = ''; envoyer(e.dataTransfer.files); });
+  }
+  $('pbZip').onclick = function () { dossierComptable(D, ex, l, $('pbZip'), $('pbZipInfo')); };
+}
+var JSZIP_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+function csvTexte(entetes, lignes) {
+  var cell = function (v) { if (typeof v === 'number') return isFinite(v) ? String(Math.round(v * 100) / 100).replace('.', ',') : ''; v = String(v == null ? '' : v); return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  return '﻿' + [entetes].concat(lignes).map(function (l) { return l.map(cell).join(';'); }).join('\r\n');
+}
+function dossierComptable(D, ex, pieces, bouton, info) {
+  bouton.disabled = true; info.textContent = 'Préparation…';
+  chargerScript(JSZIP_URL, 'JSZip').then(function (JSZip) {
+    var z = new JSZip(), cr = CPT.compteResultat(D.ecr, ex), bi = CPT.bilan(D.ecr, ex), a = ex.annee;
+    z.file('LISEZ-MOI.txt', 'Dossier préparatoire ' + (D.prm.societe.raisonSociale || '') + ' · ' + libEx(ex) + '\r\nÉtabli le ' + dateFr(isoJour(new Date())) + ' par le logiciel de comptabilité.\r\nCe dossier sert à l\'expert-comptable pour établir les comptes annuels et la liasse fiscale ; il ne la remplace pas.\r\n' + (D.factures.some(function (f) { return f.verifie !== 'oui' && f.date >= ex.du && f.date <= ex.au; }) ? 'Attention : des factures de l\'exercice ne sont pas encore validées.\r\n' : ''));
+    z.file('1-compte-de-resultat-' + a + '.csv', csvTexte(['Réf. 2033-B', 'Rubrique', 'Compte', 'Libellé', 'Montant'], [].concat.apply([], cr.lignes.map(function (l) { return [[l.code, l.lib, '', '', l.montant]].concat(Object.keys(l.comptes).sort().map(function (c) { return ['', '', c, CPT.libelle(c), l.comptes[c]]; })); })).concat([['310', 'Bénéfice ou perte', '', '', cr.resultat]])));
+    z.file('2-bilan-' + a + '.csv', csvTexte(['Côté', 'Réf. 2033-A', 'Rubrique', 'Brut', 'Amortissements', 'Net'], bi.actif.map(function (l) { return ['Actif', l.code, l.lib, l.brut, l.amort, l.net]; }).concat(bi.passif.map(function (l) { return ['Passif', l.code, l.lib, '', '', l.net]; }))));
+    z.file('3-grand-livre-' + a + '.csv', csvTexte(['Date', 'Journal', 'Pièce', 'Compte', 'Libellé du compte', 'Libellé', 'Débit', 'Crédit'], grandLivre(D, ex)));
+    z.file('4-' + ficheFec(D, ex), CPT.fec(D.ecr, ex, D.prm));
+    z.file('5-factures-' + a + '.csv', csvTexte(['Date', 'Type', 'Client / fournisseur', 'Numéro', 'Compte', 'HT', 'TVA', 'TTC', 'Prime CEE', 'Payé', 'Reste', 'Validée'], D.factures.filter(function (f) { return f.date >= ex.du && f.date <= ex.au; }).map(function (f) { return [f.date, f.sens === 'vente' ? 'Vente' : 'Achat', f.tiers, f.numero, f.compte, nb(f.ht), tvaDe(f), nb(f.ttc), nb(f.cee) || '', encaisse(f), nb(f.reste), f.verifie === 'oui' ? 'oui' : 'non']; })));
+    z.file('6-immobilisations-' + a + '.csv', csvTexte(['Bien', 'Compte', 'Acquis le', 'Valeur HT', 'Durée', 'Dotation', 'Cumul', 'Valeur nette', 'Cédé le'], D.immos.map(function (im) { var d0 = CPT.cumulAmort(im, CPT.jour(ex.du, -1)), d1 = CPT.cumulAmort(im, ex.au); return [im.libelle, im.compte, im.dateAcq, nb(im.valeur), im.duree, d1 - d0, d1, nb(im.valeur) - d1, im.dateCession || '']; })));
+    z.file('7-ecritures-diverses-' + a + '.csv', csvTexte(['Date', 'Libellé', 'Débit', 'Crédit', 'Montant'], D.ods.filter(function (o) { return o.date >= ex.du && o.date <= ex.au; }).map(function (o) { return [o.date, o.libelle, o.debit, o.credit, nb(o.montant)]; })));
+    var tv = CPT.periodes(D.prm.societe.regimeTva, a, D.prm).map(function (p) { var T = CPT.declaration(D, D.prm, p); return [p.lib, Math.round(T.a1), T.l16, T.d19, T.d20, T.l22, T.l28, T.l25, T.aValider.length]; });
+    z.file('8-tva-' + a + '.csv', csvTexte(['Période', 'A1 base HT', '16 TVA brute', '19 déductible immobilisations', '20 déductible autres', '22 crédit reporté', '28 TVA nette due', '25 crédit', 'Paiements non vus sur relevé'], tv));
+    var s = Promise.resolve(), n = 0;
+    pieces.forEach(function (p) { s = s.then(function () { info.textContent = 'Documents ' + (++n) + '/' + pieces.length + '…'; return call('getFile', { fileId: p.fileId }).then(function (f) { z.file('documents/' + String(p.type || 'Autre').replace(/[\\/:*?"<>|]/g, ' ').slice(0, 60) + '/' + f.nom, f.base64, { base64: true }); }, function () {}); }); });
+    return s.then(function () { return z.generateAsync({ type: 'blob' }); });
+  }).then(function (blob) {
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'dossier-comptable-' + ex.annee + '.zip'; document.body.appendChild(a); a.click(); setTimeout(function () { a.remove(); }, 1000);
+    info.textContent = 'Dossier téléchargé.'; bouton.disabled = false;
+  }).catch(function (e) { info.textContent = ''; bouton.disabled = false; echec(e); });
+}
+
+/* ---------- Réglages : entreprise, régime de TVA, bilan d'ouverture ---------- */
+var LIGNES_OUVERTURE = [
+  ['A', '2154', 'Immobilisations corporelles (valeur brute)'], ['A', '28154', 'moins : amortissements cumulés de ces immobilisations'], ['A', '205', 'Immobilisations incorporelles (logiciels, site)'], ['A', '275', 'Dépôts et cautionnements'],
+  ['A', '31', 'Stock de matériaux'], ['A', '411', 'Clients (factures non encore payées)'], ['A', '467', 'Autres créances (primes CEE à recevoir…)'], ['A', '44566', 'TVA à récupérer (crédit de TVA)'], ['A', '486', 'Charges constatées d\'avance'],
+  ['A', '512', 'Banque (solde du relevé à la date d\'ouverture)'], ['A', '53', 'Caisse'],
+  ['P', '101', 'Capital'], ['P', '1061', 'Réserve légale'], ['P', '1068', 'Autres réserves'], ['P', '110', 'Report à nouveau (négatif si pertes)'], ['P', '120', 'Résultat de l\'exercice précédent (pas encore affecté)'],
+  ['P', '164', 'Emprunts (capital restant dû)'], ['P', '401', 'Fournisseurs (factures non encore payées)'], ['P', '44571', 'TVA due'], ['P', '431', 'Dettes sociales (URSSAF…)'], ['P', '444', 'Impôt sur les sociétés dû'], ['P', '455', 'Compte courant du dirigeant'], ['P', '487', 'Produits constatés d\'avance']
+];
+function vueReglages(D, P, gestion) {
+  var s = D.prm.societe, o = D.prm.ouverture || {}, dis = gestion ? '' : ' disabled';
+  var val = {}; (o.lignes || []).forEach(function (x) { val[x.compte] = (val[x.compte] || 0) + nb(x.debit) - nb(x.credit); });
+  var h = '<form class="card" id="rgF"><span class="tag">Entreprise et TVA</span><div class="fgrid">' +
+    '<label class="f">Raison sociale<input name="raisonSociale" maxlength="120" value="' + esc(s.raisonSociale) + '"' + dis + '></label><label class="f">SIREN<input name="siren" maxlength="11" inputmode="numeric" value="' + esc(s.siren) + '"' + dis + '></label>' +
+    '<label class="f">Forme<select name="forme"' + dis + '>' + ['SASU', 'SAS', 'EURL', 'SARL', 'EI', 'Autre'].map(function (x) { return '<option' + (s.forme === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label></div>' +
+    '<div class="fgrid"><label class="f">Déclaration de TVA<select name="regimeTva"' + dis + '>' + Object.keys(REGIMES_TVA).map(function (k) { return '<option value="' + k + '"' + (s.regimeTva === k ? ' selected' : '') + '>' + esc(REGIMES_TVA[k]) + '</option>'; }).join('') + '</select></label>' +
+    '<label class="f">Début de l\'exercice (jour et mois)<input name="debutExercice" pattern="\\d{2}-\\d{2}" placeholder="01-01" value="' + esc(s.debutExercice || '01-01') + '"' + dis + '></label>' +
+    '<label class="f">Compte des ventes<select name="compteVentes"' + dis + '>' + optionsComptes(s.compteVentes || '706', function (c) { return /^70/.test(c); }) + '</select></label></div>' +
+    '<div class="fgrid"><label class="f">Crédit de TVA au départ<input name="creditTva" inputmode="decimal" value="' + esc(s.creditTva) + '"' + dis + '></label><label class="f">… constaté à la fin de la période close le<input type="date" name="creditTvaDate" value="' + esc(s.creditTvaDate) + '"' + dis + '></label></div>' +
+    '<p class="muted small" style="margin:0">TVA sur les encaissements : la TVA des travaux n\'est due qu\'au paiement du client. Le SIREN et la raison sociale servent à reconnaître vos propres factures (ventes) parmi les documents déposés.</p>' +
+    (gestion ? '<div class="row"><button class="btn primary">Enregistrer</button></div>' : '') + '</form>' +
+    '<form class="card" id="ouF"><span class="tag">Bilan d\'ouverture (à recopier de l\'ancien bilan)</span><p class="muted small" style="margin:0">Montants du dernier bilan clos (ou à la date où vous commencez à utiliser le logiciel). Les factures et opérations antérieures à cette date ne sont pas recomptées. Déposez l\'ancien bilan dans « Documents du bilan ».</p>' +
+    '<label class="f" style="max-width:260px">Date d\'ouverture<input type="date" name="date" value="' + esc(o.date || '') + '"' + dis + '></label>' +
+    '<div class="grid"><div><b>Actif</b>' + LIGNES_OUVERTURE.filter(function (x) { return x[0] === 'A'; }).map(champOuv).join('') + '</div><div><b>Passif</b>' + LIGNES_OUVERTURE.filter(function (x) { return x[0] === 'P'; }).map(champOuv).join('') + '</div></div>' +
+    '<b id="ouE"></b><div class="err" id="ouErr"></div>' + (gestion ? '<div class="row"><button class="btn primary">Enregistrer le bilan d\'ouverture</button></div>' : '') + '</form>';
+  function champOuv(x) { var v = val[x[1]]; if (v !== undefined && x[0] === 'P') v = -v; if (x[1] === '28154' && v !== undefined) v = -val[x[1]]; return '<label class="f" style="margin-top:6px">' + esc(x[2]) + ' <span class="muted small">' + x[1] + '</span><input data-ou="' + x[1] + '" data-cote="' + (x[1] === '28154' ? 'P' : x[0]) + '" inputmode="decimal" value="' + (v === undefined || !v ? '' : String(Math.round(v * 100) / 100).replace('.', ',')) + '"' + dis + '></label>'; }
+  $('faZone').innerHTML = h;
+  var ecart = function () {
+    var a = 0, p = 0;
+    $('ouF').querySelectorAll('[data-ou]').forEach(function (i) { var v = nb(i.value); if (i.dataset.ou === '28154') a -= v; else if (i.dataset.cote === 'A') a += v; else p += v; });
+    $('ouE').textContent = 'Total actif ' + eur(a) + ' · total passif ' + eur(p) + (Math.abs(a - p) >= 0.01 ? ' · écart ' + eur(a - p) + ' (mis en compte d\'attente)' : ' · équilibré ✓');
+    $('ouE').style.color = Math.abs(a - p) >= 0.01 ? 'var(--warn)' : 'var(--ok)';
+  };
+  ecart(); $('ouF').addEventListener('input', ecart);
+  if (!gestion) return;
+  $('rgF').onsubmit = function (ev) {
+    ev.preventDefault(); var d = formData($('rgF'));
+    d.siren = String(d.siren || '').replace(/\D/g, ''); if (!/^\d{2}-\d{2}$/.test(d.debutExercice)) d.debutExercice = '01-01';
+    sauverParam(D, 'societe', Object.assign({}, s, d)).then(function () { toast('Réglages enregistrés.'); ouvrir('factures'); }).catch(echec);
+  };
+  $('ouF').onsubmit = function (ev) {
+    ev.preventDefault();
+    var date = $('ouF').querySelector('[name=date]').value;
+    if (!date) { $('ouErr').textContent = 'Indiquez la date d\'ouverture (lendemain de la clôture du dernier bilan).'; return; }
+    var lignes = [];
+    $('ouF').querySelectorAll('[data-ou]').forEach(function (i) { var v = nb(i.value); if (!v) return; var c = i.dataset.ou, deb = i.dataset.cote === 'A' && c !== '28154'; if (v < 0) { deb = !deb; v = -v; } lignes.push({ compte: c, libelle: CPT.libelle(c), debit: deb ? v : 0, credit: deb ? 0 : v }); });
+    sauverParam(D, 'ouverture', { date: date, lignes: lignes }).then(function () { toast('Bilan d\'ouverture enregistré.'); ouvrir('factures'); }).catch(echec);
+  };
+}
+/* @@COMPTA-UI-FIN */
 
 /* ---------- Mon profil ---------- */
 VUES.profil = function () {
@@ -2314,7 +3489,7 @@ var LIB_MOD = {
   photos: ['Photos de chantier', 'voir', 'ajouter des photos'],
   devis: ['Logiciel de devis', 'ouvrir le logiciel', 'et le mettre à jour'],
   calculateur: ['Calculateur de coût', 'calculer et enregistrer ses calculs', 'voir tous les calculs et modifier les prix'],
-  factures: ['Factures et banque', 'consulter factures, encaissements et TVA', 'lire des factures et relevés, rapprocher, modifier']
+  factures: ['Comptabilité (factures, banque, TVA, bilan)', 'consulter factures, TVA, résultat et bilan', 'lire des factures et relevés, valider, rapprocher, modifier']
 };
 VUES.admin = function () {
   return call('listUsers').then(function (us) {
