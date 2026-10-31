@@ -104,6 +104,12 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--surface-2); 
 .planning td.today, .planning th.today { background: color-mix(in srgb, var(--gold) 9%, var(--surface)); }
 .ev { display: block; width: 100%; text-align: left; border: 0; border-left: 4px solid var(--gold); background: var(--surface-2); border-radius: 4px; padding: 4px 6px; margin-bottom: 4px; font-size: 13px; line-height: 1.25; }
 .ev b { display: block; font-weight: 700; }
+.evw { position: relative; }
+.evw .ev { padding-right: 16px; }
+.evh { position: absolute; top: 0; right: 0; bottom: 4px; width: 14px; cursor: ew-resize; touch-action: none; border-radius: 0 4px 4px 0; background: linear-gradient(90deg, transparent 4px, color-mix(in srgb, var(--gold) 55%, transparent) 4px, color-mix(in srgb, var(--gold) 55%, transparent) 6px, transparent 6px, transparent 8px, color-mix(in srgb, var(--gold) 55%, transparent) 8px, color-mix(in srgb, var(--gold) 55%, transparent) 10px, transparent 10px); }
+.evh:hover { background-color: color-mix(in srgb, var(--gold) 25%, transparent); }
+.planning td.tirage { background: color-mix(in srgb, var(--gold) 22%, var(--surface)); outline: 2px dashed var(--gold); outline-offset: -3px; }
+body.etire, body.etire * { cursor: ew-resize !important; user-select: none; }
 .addcell { border: 1.5px dashed var(--line); background: transparent; color: var(--muted); border-radius: 4px; width: 100%; padding: 2px; font-size: 13px; }
 
 /* Photos */
@@ -1280,12 +1286,12 @@ VUES.planning = function () {
     var nomCh = function (id) { var c = chantiers.filter(function (x) { return x.id === id; })[0]; return c ? c.client + (c.ville ? ' · ' + c.ville : '') : ''; };
     var modif = peut('planning');
     var h = '<div class="head"><h2>Planning</h2><div class="row"><button class="btn ghost small" id="pPrev">◀ Semaine</button><button class="btn ghost small" id="pNow">Cette semaine</button><button class="btn ghost small" id="pNext">Semaine ▶</button></div></div>' +
-      '<p class="muted small" style="margin:0">Semaine du ' + esc(dateFr(du, true)) + ' au ' + esc(dateFr(au, true)) + (modif ? ' · touchez une case pour ajouter une affectation' : ' · consultation') + '</p>' +
+      '<p class="muted small" style="margin:0">Semaine du ' + esc(dateFr(du, true)) + ' au ' + esc(dateFr(au, true)) + (modif ? ' · touchez une case pour ajouter une affectation, étirez une affectation par son bord droit pour la recopier sur les jours suivants' : ' · consultation') + '</p>' +
       '<div class="tablewrap"><table class="planning"><thead><tr><th>Salarié</th>' + jours.map(function (d) { var k = isoJour(d); return '<th class="' + (k === aujourd ? 'today' : '') + '">' + d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       S.annuaire.map(function (u) {
         return '<tr><td><b>' + esc(u.prenom + ' ' + u.nom) + '</b><br><span class="muted small">' + esc(u.poste || '') + '</span></td>' + jours.map(function (d) {
           var k = isoJour(d), cell = evs.filter(function (e) { return e.userId === u.id && e.date === k; });
-          return '<td class="' + (k === aujourd ? 'today' : '') + '">' + cell.map(function (e) { return '<button class="ev" data-ev="' + esc(e.id) + '"><b>' + esc(e.libelle || nomCh(e.chantierId) || 'Affectation') + '</b>' + esc(nomCh(e.chantierId) && e.libelle ? nomCh(e.chantierId) : '') + (e.debut ? ' ' + esc(e.debut) + (e.fin ? '–' + esc(e.fin) : '') : '') + '</button>'; }).join('') + (modif ? '<button class="addcell" data-add="' + esc(u.id) + '|' + k + '" aria-label="Ajouter">+</button>' : '') + '</td>';
+          return '<td class="' + (k === aujourd ? 'today' : '') + '" data-cell="' + esc(u.id) + '|' + k + '">' + cell.map(function (e) { var b = '<button class="ev" data-ev="' + esc(e.id) + '"><b>' + esc(e.libelle || nomCh(e.chantierId) || 'Affectation') + '</b>' + esc(nomCh(e.chantierId) && e.libelle ? nomCh(e.chantierId) : '') + (e.debut ? ' ' + esc(e.debut) + (e.fin ? '–' + esc(e.fin) : '') : '') + '</button>'; return modif ? '<div class="evw">' + b + '<span class="evh" data-tire="' + esc(e.id) + '" title="Étirer pour recopier sur les jours suivants" aria-hidden="true"></span></div>' : b; }).join('') + (modif ? '<button class="addcell" data-add="' + esc(u.id) + '|' + k + '" aria-label="Ajouter">+</button>' : '') + '</td>';
         }).join('') + '</tr>';
       }).join('') + '</tbody></table></div>';
     $('view').innerHTML = h;
@@ -1293,14 +1299,49 @@ VUES.planning = function () {
     $('pNext').onclick = function () { S.semaine.setDate(S.semaine.getDate() + 7); ouvrir('planning'); };
     $('pNow').onclick = function () { S.semaine = lundi(new Date()); ouvrir('planning'); };
     $('view').querySelectorAll('[data-add]').forEach(function (b) { b.onclick = function () { var p = b.dataset.add.split('|'); formPlanning({ userId: p[0], date: p[1] }); }; });
+    if (modif) brancherEtirement(evs);
     $('view').querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { var e = evs.filter(function (x) { return x.id === b.dataset.ev; })[0]; modif ? formPlanning(e) : modale(e.libelle || 'Affectation', '<p>' + esc(nomDe(e.userId)) + ' · ' + esc(dateFr(e.date, true)) + '</p>' + (e.chantierId ? '<p>Chantier : ' + esc(nomCh(e.chantierId)) + '</p>' : '') + (e.debut ? '<p>Horaires : ' + esc(e.debut) + (e.fin ? ' – ' + esc(e.fin) : '') + '</p>' : '') + (e.note ? '<p class="note">' + esc(e.note) + '</p>' : '') + '<div><button class="btn ghost" onclick="this.closest(\'.modal\').remove()">Fermer</button></div>'); }; });
   });
 };
+/** Étirer une affectation par son bord droit : elle est recopiée sur les jours suivants de la même ligne (souris ou doigt). */
+function brancherEtirement(evs) {
+  $('view').querySelectorAll('[data-tire]').forEach(function (poignee) {
+    poignee.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault(); ev.stopPropagation();
+      var e = evs.filter(function (x) { return x.id === poignee.dataset.tire; })[0]; if (!e) return;
+      var ligne = poignee.closest('tr'), cases = [].slice.call(ligne.querySelectorAll('td[data-cell]'));
+      var depart = cases.indexOf(poignee.closest('td')), choisies = [];
+      try { poignee.setPointerCapture(ev.pointerId); } catch (x) {}
+      document.body.classList.add('etire');
+      var marquer = function (x, y) {
+        var td = document.elementFromPoint(x, y); td = td && td.closest ? td.closest('td[data-cell]') : null;
+        var i = td ? cases.indexOf(td) : -1;
+        if (i < 0) { var r = cases[cases.length - 1].getBoundingClientRect(); if (x > r.right) i = cases.length - 1; }
+        choisies = i > depart ? cases.slice(depart + 1, i + 1) : [];
+        cases.forEach(function (c) { c.classList.toggle('tirage', choisies.indexOf(c) >= 0); });
+      };
+      var bouge = function (m) { marquer(m.clientX, m.clientY); };
+      var fin = function () {
+        poignee.removeEventListener('pointermove', bouge); poignee.removeEventListener('pointerup', fin); poignee.removeEventListener('pointercancel', annule);
+        document.body.classList.remove('etire'); cases.forEach(function (c) { c.classList.remove('tirage'); });
+        // pas de doublon : un jour qui a déjà la même affectation est sauté
+        var dates = choisies.map(function (c) { return c.dataset.cell.split('|')[1]; }).filter(function (d) { return !evs.some(function (x) { return x.userId === e.userId && x.date === d && x.chantierId === e.chantierId && x.libelle === e.libelle; }); });
+        if (!dates.length) return;
+        var row = { userId: e.userId, chantierId: e.chantierId || '', libelle: e.libelle || '', debut: e.debut || '', fin: e.fin || '', note: e.note || '' };
+        call('savePlanningSerie', { row: row, dates: dates }).then(function (l) { toast(l.length + ' jour' + (l.length > 1 ? 's' : '') + ' ajouté' + (l.length > 1 ? 's' : '') + '.'); ouvrir('planning'); }).catch(echec);
+      };
+      var annule = function () { choisies = []; fin(); };
+      poignee.addEventListener('pointermove', bouge); poignee.addEventListener('pointerup', fin); poignee.addEventListener('pointercancel', annule);
+    });
+  });
+}
 var JOURS_SEM = [['1', 'Lun'], ['2', 'Mar'], ['3', 'Mer'], ['4', 'Jeu'], ['5', 'Ven'], ['6', 'Sam'], ['0', 'Dim']];
-/** Liste des dates (AAAA-MM-JJ) entre deux dates, limitée aux jours de la semaine cochés. */
+/** Liste des dates (AAAA-MM-JJ) entre deux dates, limitée aux jours de la semaine cochés.
+ *  Sans date de fin : les jours cochés sont pris dans les 7 jours à partir de la date de début. */
 function joursEntre(du, au, jours) {
   var out = []; if (!du) return out;
   var d = new Date(du + 'T12:00:00'), fin = new Date((au && au >= du ? au : du) + 'T12:00:00');
+  if (!au) fin.setDate(fin.getDate() + 6);
   while (d <= fin && out.length < 400) { if (jours.indexOf(String(d.getDay())) >= 0) out.push(isoJour(d)); d.setDate(d.getDate() + 1); }
   return out;
 }
@@ -1309,7 +1350,7 @@ function formPlanning(e) {
   var selUser = '<label class="f">Salarié<select name="userId">' + S.annuaire.map(function (u) { return '<option value="' + esc(u.id) + '"' + (u.id === e.userId ? ' selected' : '') + '>' + esc(u.prenom + ' ' + u.nom) + '</option>'; }).join('') + '</select></label>';
   var champDates = nouveau
     ? '<div class="fgrid">' + selUser + '<label class="f">Du<input type="date" name="date" value="' + esc(e.date) + '" required></label><label class="f">Au (facultatif)<input type="date" name="au" value=""></label></div>' +
-      '<div><span class="f">Jours concernés</span><div class="cks">' + JOURS_SEM.map(function (j) { return '<label><input type="checkbox" data-jour="' + j[0] + '"' + (j[0] !== '0' && j[0] !== '6' ? ' checked' : '') + '>' + j[1] + '</label>'; }).join('') + '</div></div><div class="muted small" id="plCompte"></div>'
+      '<div><span class="f">Jours concernés</span><div class="cks">' + JOURS_SEM.map(function (j) { return '<label><input type="checkbox" data-jour="' + j[0] + '">' + j[1] + '</label>'; }).join('') + '</div><span class="muted small">Sans date « Au » : les jours cochés de la semaine qui commence le « Du ». Avec une date « Au » : les jours cochés sur toute la période.</span></div><div class="muted small" id="plCompte"></div>'
     : '<div class="fgrid">' + selUser + '<label class="f">Date<input type="date" name="date" value="' + esc(e.date) + '" required></label></div>' +
       (e.serie ? '<div class="pill gold" style="justify-self:start">Fait partie d\'une série de plusieurs jours</div>' : '');
   var m = modale(nouveau ? 'Nouvelle affectation' : 'Modifier l\'affectation',
@@ -1326,9 +1367,24 @@ function formPlanning(e) {
   if (nouveau) { $('plF').addEventListener('input', compter); $('plF').addEventListener('change', compter); compter(); }
   var asP = e.id ? autoSave($('plF'), { ind: $('plAuto'), valide: function (d) { return !!d.date; }, save: function (d) { d.id = e.id; return call('save', { table: 'Planning', row: d }); } }) : null;
   var brP = nouveau ? brouillon($('plF'), 'planning', $('plAuto'), ['userId', 'date', 'au']) : null;
-  // la case du jour cliqué est toujours cochée (même un samedi)
-  if (nouveau && e.date) { var cj = $('plF').querySelector('[data-jour="' + new Date(e.date + 'T12:00:00').getDay() + '"]'); if (cj) cj.checked = true; }
-  if (nouveau) compter();
+  // au départ, seul le jour choisi est coché ; dès qu'une date « Au » est saisie, lundi à vendredi sont cochés en plus
+  if (nouveau) {
+    var f0 = $('plF'), cocher = function (j) { var c = f0.querySelector('[data-jour="' + j + '"]'); if (c) c.checked = true; };
+    var jourDu = function () { var v = f0.querySelector('[name=date]').value; return v ? String(new Date(v + 'T12:00:00').getDay()) : ''; };
+    if (jourDu()) cocher(jourDu()); else ['1', '2', '3', '4', '5'].forEach(cocher);
+    var auVu = !!f0.querySelector('[name=au]').value;
+    f0.querySelector('[name=au]').addEventListener('change', function () {
+      var coches = [].filter.call(f0.querySelectorAll('[data-jour]'), function (c) { return c.checked; });
+      if (!auVu && this.value && coches.length <= 1) ['1', '2', '3', '4', '5'].forEach(cocher);
+      auVu = auVu || !!this.value; compter();
+    });
+    f0.querySelector('[name=date]').addEventListener('change', function () {
+      var coches = [].filter.call(f0.querySelectorAll('[data-jour]'), function (c) { return c.checked; });
+      if (!f0.querySelector('[name=au]').value && coches.length <= 1) { coches.forEach(function (c) { c.checked = false; }); if (jourDu()) cocher(jourDu()); }
+      compter();
+    });
+    compter();
+  }
   m.avantFermeture = function () { if (asP) return asP.flush().then(function () { if (asP.aEnregistre()) ouvrir('planning'); }); };
   $('plX').onclick = function () { m.fermer(); };
   $('plF').onsubmit = function (ev) {
@@ -1891,6 +1947,12 @@ function num1(v, d) { return (Math.round(v * Math.pow(10, d || 1)) / Math.pow(10
  * Coût d'un chantier d'injection de microbilles (d'après le classeur « Calcul coût inject styrène »)
  * et prix de vente selon les tarifs du logiciel de devis. Fonction pure : P = paramètres, s = saisie.
  */
+/** Coût d'une journée de poseur : taux brut × heures × (1 + charges) + indemnités (ou montant fixe s'il n'y a pas de taux). */
+function moJour(P) {
+  var M = P.mainOeuvre || {};
+  if (nb(M.tauxHoraireBrut) > 0) return nb(M.tauxHoraireBrut) * (nb(M.heuresParJour) || 7) * (1 + nb(M.chargesPct) / 100) + nb(M.indemnitesJour);
+  return nb(M.parJourParPoseur);
+}
 var ZONES_CALC = [['mur', 'Murs / doublage'], ['plancher', 'Plancher'], ['videSanitaire', 'Vide sanitaire'], ['rampant', 'Rampant'], ['fauxPlafond', 'Faux plafond']];
 function calculCout(P, s) {
   var lignes = (s.lignes || []).filter(function (l) { return nb(l.surface) > 0 && nb(l.ep) > 0; });
@@ -1901,7 +1963,7 @@ function calculCout(P, s) {
   var T = P.tarifs;
   var litres = km * 2 * trajets * P.carburant.litresAu100 / 100;
   var commun = {
-    mainOeuvre: P.mainOeuvre.parJourParPoseur * poseurs * jours,
+    mainOeuvre: moJour(P) * poseurs * jours,
     carburant: litres * P.carburant.prixLitre,
     compresseur: P.compresseur.parJour * (s.joursCompresseur === '' || s.joursCompresseur == null ? jours : nb(s.joursCompresseur)) + (s.transportCompresseur === false ? 0 : P.compresseur.transport),
     divers: nb(s.divers)
@@ -2034,7 +2096,7 @@ function afficherResultat(P, C) {
     L('Colle / liant', function (m, k) { return '<span class="muted small">' + num1(m.colle) + ' × ' + eur(I(k).prixColle) + ' (' + esc(I(k).libColle) + ')</span><br>' + eur(m.colleCout); }) +
     L('Transport colle / liant', function (m) { return eur(m.transportColle); }) +
     L('<b>Matière livrée</b>', function (m) { return '<b>' + eur(m.matiere) + '</b>'; }) +
-    L('Main d\'œuvre <span class="muted small">(' + nb(C.poseurs || 1) + ' × ' + nb(C.jours || 1) + ' j × ' + eur(P.mainOeuvre.parJourParPoseur, 0) + ')</span>', function () { return eur(r.commun.mainOeuvre); }) +
+    L('Main d\'œuvre <span class="muted small">(' + nb(C.poseurs || 1) + ' × ' + nb(C.jours || 1) + ' j × ' + eur(moJour(P)) + ')</span>' + (nb(P.mainOeuvre.tauxHoraireBrut) ? '<br><span class="muted small">' + String(P.mainOeuvre.tauxHoraireBrut).replace('.', ',') + ' € brut × ' + P.mainOeuvre.heuresParJour + ' h + ' + String(P.mainOeuvre.chargesPct).replace('.', ',') + ' % de charges et congés + ' + eur(nb(P.mainOeuvre.indemnitesJour), 0) + ' d\'indemnités</span>' : ''), function () { return eur(r.commun.mainOeuvre); }) +
     L('Carburant <span class="muted small">(' + num1(r.kmAR) + ' km, ' + num1(r.litres) + ' L à ' + eur(P.carburant.prixLitre) + ', ' + P.carburant.litresAu100 + ' L/100)</span>', function () { return eur(r.commun.carburant); }) +
     L('Compresseur', function () { return eur(r.commun.compresseur); }) +
     (r.commun.divers ? L('Autres frais', function () { return eur(r.commun.divers); }) : '') +
@@ -2052,10 +2114,13 @@ function formParams(P) {
   var champ = function (lib, chemin, v, pas) { return '<label class="f">' + lib + '<input data-p="' + chemin + '" inputmode="decimal" value="' + esc(String(v).replace('.', ',')) + '"></label>'; };
   var iso = function (k) { var I = P.isolants[k]; return '<fieldset><legend>' + esc(I.nom) + '</legend><div class="fgrid">' + champ('Prix du sac (€ HT)', 'isolants.' + k + '.prixSac', I.prixSac) + champ('Transport par sac (€)', 'isolants.' + k + '.transportSac', I.transportSac) + champ('Sacs par m³', 'isolants.' + k + '.sacsParM3', I.sacsParM3) + champ(esc(I.libColle) + ' : prix unitaire', 'isolants.' + k + '.prixColle', I.prixColle) + champ('Transport par unité', 'isolants.' + k + '.transportColle', I.transportColle) + champ('Unités par m³', 'isolants.' + k + '.colleParM3', I.colleParM3) + '</div></fieldset>'; };
   var m = modale('Prix et paramètres du calculateur', '<form id="prmF" style="display:grid;gap:12px">' +
-    '<fieldset><legend>Trajets et équipe</legend><div class="fgrid">' + champ('Carburant (€/L)', 'carburant.prixLitre', P.carburant.prixLitre) + champ('Consommation du camion (L/100 km)', 'carburant.litresAu100', P.carburant.litresAu100) + champ('Main d\'œuvre (€ par jour et par poseur)', 'mainOeuvre.parJourParPoseur', P.mainOeuvre.parJourParPoseur) + champ('Compresseur (€/jour)', 'compresseur.parJour', P.compresseur.parJour) + champ('Transport compresseur (€)', 'compresseur.transport', P.compresseur.transport) + champ('Perte par défaut (%)', 'perteVolume', P.perteVolume) + champ('Coefficient prix plancher', 'coefPlancher', P.coefPlancher) + '</div></fieldset>' +
+    '<fieldset><legend>Trajets et équipe</legend><div class="fgrid">' + champ('Carburant (€/L)', 'carburant.prixLitre', P.carburant.prixLitre) + champ('Consommation du camion (L/100 km)', 'carburant.litresAu100', P.carburant.litresAu100) + champ('Compresseur (€/jour)', 'compresseur.parJour', P.compresseur.parJour) + champ('Transport compresseur (€)', 'compresseur.transport', P.compresseur.transport) + champ('Perte par défaut (%)', 'perteVolume', P.perteVolume) + champ('Coefficient prix plancher', 'coefPlancher', P.coefPlancher) + '</div></fieldset>' +
+    '<fieldset><legend>Main d\'œuvre d\'un poseur</legend><div class="fgrid">' + champ('Salaire horaire brut (€)', 'mainOeuvre.tauxHoraireBrut', P.mainOeuvre.tauxHoraireBrut) + champ('Heures par jour de chantier', 'mainOeuvre.heuresParJour', P.mainOeuvre.heuresParJour) + champ('Charges patronales et congés (% du brut)', 'mainOeuvre.chargesPct', P.mainOeuvre.chargesPct) + champ('Indemnités par jour (panier, trajet) (€)', 'mainOeuvre.indemnitesJour', P.mainOeuvre.indemnitesJour) + '</div><b id="prmMo" class="small"></b><p class="muted small" style="margin:0">36 % = cotisations après réduction générale + congés CIBTP Grand-Ouest (20,70 %) + prévoyance PRO BTP + mutuelle, avec une marge pour le taux accidents du travail et la mutuelle. Mettez le salaire horaire à 0 pour saisir directement un coût par jour :</p><div class="fgrid">' + champ('Coût fixe par jour et par poseur (€)', 'mainOeuvre.parJourParPoseur', P.mainOeuvre.parJourParPoseur) + '</div></fieldset>' +
     iso('ecobille') + iso('billeco') +
     '<fieldset><legend>Tarifs du logiciel de devis (€ HT)</legend><p class="muted small" style="margin:0">À garder identiques à l\'onglet Tarifs du logiciel de devis.</p><div class="fgrid">' + ZONES_CALC.map(function (z) { return champ(z[1] + ' (€/m²)', 'tarifs.' + z[0], P.tarifs[z[0]]); }).join('') + champ('Main d\'œuvre (€/m²)', 'tarifs.mainOeuvre', P.tarifs.mainOeuvre) + champ('Forfait préparation compresseur (€)', 'tarifs.preparationCompresseur', P.tarifs.preparationCompresseur) + champ('Devis minimum (€)', 'tarifs.minimum', P.tarifs.minimum) + '</div></fieldset>' +
     '<div class="err" id="prmErr"></div><div class="row"><button class="btn primary">Enregistrer</button><button type="button" class="btn ghost" id="prmX">Annuler</button><button type="button" class="btn danger" id="prmRaz">Revenir aux valeurs d\'origine</button></div></form>', true);
+  var moAff = function () { var v = function (k) { return nb($('prmF').querySelector('[data-p="mainOeuvre.' + k + '"]').value); }; var t = v('tauxHoraireBrut'); $('prmMo').textContent = t > 0 ? 'Coût d\'un poseur : ' + eur(t * (v('heuresParJour') || 7) * (1 + v('chargesPct') / 100) + v('indemnitesJour')) + ' par jour (' + eur(t * (1 + v('chargesPct') / 100)) + ' de l\'heure chargée)' : 'Coût fixe : ' + eur(v('parJourParPoseur')) + ' par jour'; };
+  moAff(); $('prmF').addEventListener('input', moAff);
   $('prmX').onclick = function () { m.fermer(); };
   $('prmRaz').onclick = function () { var b = $('prmRaz'); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Confirmer le retour aux valeurs d\'origine'; return; } call('resetParamsCalcul').then(function () { m.remove(); toast('Valeurs d\'origine rétablies.'); ouvrir('calculateur'); }).catch(echec); };
   $('prmF').onsubmit = function (ev) {
