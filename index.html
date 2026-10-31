@@ -110,6 +110,28 @@ tr.click { cursor: pointer; } tr.click:hover td { background: var(--surface-2); 
 .evh:hover { background-color: color-mix(in srgb, var(--gold) 25%, transparent); }
 .planning td.tirage { background: color-mix(in srgb, var(--gold) 22%, var(--surface)); outline: 2px dashed var(--gold); outline-offset: -3px; }
 body.etire, body.etire * { cursor: ew-resize !important; user-select: none; }
+@media (hover: hover) { .evw .ev { cursor: grab; } }
+body.deplace, body.deplace * { cursor: grabbing !important; user-select: none; }
+.ev.source { opacity: .35; }
+.ikpill { display: inline-block; font: 700 10px var(--f-body); padding: 0 5px; border-radius: 4px; background: var(--s2, #2f6fb8); color: #fff; vertical-align: 1px; }
+.ikcase { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }
+.ik-jour td { border-top: 2px solid var(--line); }
+.ik-retour td { background: var(--surface-2); font-style: italic; color: var(--muted); }
+.ik-total td { font-weight: 700; }
+.ik-tag { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: var(--ok-bg); color: var(--ok); }
+.ik-tag.manuel { background: color-mix(in srgb, var(--s2, #2f6fb8) 15%, var(--surface)); color: var(--s2, #2f6fb8); }
+.ik-km { width: 70px; padding: 5px; border: 1.5px solid var(--line); border-radius: 6px; background: var(--surface-2); text-align: right; }
+.plq { display: grid; gap: 6px; }
+.plq input { padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--surface); font: inherit; max-width: 520px; }
+.plql { display: grid; gap: 4px; max-height: 260px; overflow: auto; }
+.plql button { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+.plql button:hover { border-color: var(--gold); }
+.plql button.passe { opacity: .7; }
+.ev.trouve { outline: 2px solid var(--gold); background: color-mix(in srgb, var(--gold) 18%, var(--surface-2)); }
+.ev.pale { opacity: .35; }
+.ev.fantome { position: fixed; z-index: 70; pointer-events: none; box-shadow: 0 6px 18px rgba(0,0,0,.25); opacity: .95; }
+.ev.fantome.copie::after { content: '+ copie'; display: block; font-size: 11px; color: var(--gold-ink); font-weight: 700; }
+.planning td.depot { background: color-mix(in srgb, var(--gold) 22%, var(--surface)); outline: 2px solid var(--gold); outline-offset: -3px; }
 .addcell { border: 1.5px dashed var(--line); background: transparent; color: var(--muted); border-radius: 4px; width: 100%; padding: 2px; font-size: 13px; }
 
 /* Photos */
@@ -750,6 +772,7 @@ var MODULES = [
   { k: 'chantiers', l: 'Chantiers', g: 'Terrain', mots: 'fiche photos' }, { k: 'planning', l: 'Planning', g: 'Terrain', mots: 'agenda semaine' }, { k: 'logistique', l: 'Logistique', g: 'Terrain', mots: 'matériel camion stock' },
   { k: 'devis', l: 'Devis', g: 'Commercial', mots: 'logiciel fiche mesure' }, { k: 'calculateur', l: 'Calculateur', g: 'Commercial', mots: 'coût marge prix carburant distance' },
   { k: 'formation', l: 'Formation', g: 'Équipe', mots: 'cours quiz' }, { k: 'social', l: 'Social', g: 'Équipe', mots: 'bulletin salaire contrat rh' },
+  { k: 'ik', l: 'Indemnités km', g: 'Administratif', mots: 'ik indemnités kilométriques trajets véhicule barème frais km' },
   { k: 'factures', l: 'Comptabilité', g: 'Administratif', mots: 'factures tva encaissement banque relevé compta comptable csv bilan résultat amortissement immobilisation ik fec' }
 ];
 function ongletVisible(k) {
@@ -787,10 +810,10 @@ function superAdmin() { return S.user && S.user.role === 'superadmin'; }
 function gestionnaire() { return S.user && (S.user.role === 'superadmin' || S.user.role === 'administratif'); }
 var ROLES = { superadmin: 'Super admin', administratif: 'Administratif', salarie: 'Conseiller technique', ouvrier: 'Ouvrier' };
 var PERMS_PAR_ROLE = {
-  superadmin:    { accueil: 'modif', recherche: 'modif', documents: 'modif', formation: 'modif', social: 'modif', planning: 'modif', logistique: 'modif', chantiers: 'modif', photos: 'modif', devis: 'modif', calculateur: 'modif', factures: 'modif' },
-  administratif: { accueil: 'modif', recherche: 'modif', documents: 'modif', formation: 'modif', social: 'modif', planning: 'modif', logistique: 'modif', chantiers: 'modif', photos: 'modif', devis: 'modif', calculateur: 'modif', factures: 'modif' },
-  salarie:       { accueil: 'lecture', recherche: 'lecture', documents: 'lecture', formation: 'lecture', social: 'lecture', planning: 'lecture', logistique: 'lecture', chantiers: 'lecture', photos: 'modif', devis: 'lecture', calculateur: 'lecture', factures: 'aucun' },
-  ouvrier:       { accueil: 'lecture', recherche: 'lecture', documents: 'lecture', formation: 'lecture', social: 'aucun', planning: 'lecture', logistique: 'aucun', chantiers: 'lecture', photos: 'modif', devis: 'aucun', calculateur: 'aucun', factures: 'aucun' }
+  superadmin:    { accueil: 'modif', recherche: 'modif', documents: 'modif', formation: 'modif', social: 'modif', planning: 'modif', logistique: 'modif', chantiers: 'modif', photos: 'modif', devis: 'modif', calculateur: 'modif', factures: 'modif', ik: 'modif' },
+  administratif: { accueil: 'modif', recherche: 'modif', documents: 'modif', formation: 'modif', social: 'modif', planning: 'modif', logistique: 'modif', chantiers: 'modif', photos: 'modif', devis: 'modif', calculateur: 'modif', factures: 'modif', ik: 'modif' },
+  salarie:       { accueil: 'lecture', recherche: 'lecture', documents: 'lecture', formation: 'lecture', social: 'lecture', planning: 'lecture', logistique: 'lecture', chantiers: 'lecture', photos: 'modif', devis: 'lecture', calculateur: 'lecture', factures: 'aucun', ik: 'aucun' },
+  ouvrier:       { accueil: 'lecture', recherche: 'lecture', documents: 'lecture', formation: 'lecture', social: 'aucun', planning: 'lecture', logistique: 'aucun', chantiers: 'lecture', photos: 'modif', devis: 'aucun', calculateur: 'aucun', factures: 'aucun', ik: 'aucun' }
 };
 /** Comptes que la personne connectée peut gérer (remise de documents, etc.) */
 function gerables() { return S.annuaire.filter(function (u) { return superAdmin() || (S.user.role === 'administratif' && (u.role === 'salarie' || u.role === 'ouvrier')); }); }
@@ -1285,24 +1308,89 @@ VUES.planning = function () {
     var evs = res[0], chantiers = res[1]; S.cache.chantiers = chantiers;
     var nomCh = function (id) { var c = chantiers.filter(function (x) { return x.id === id; })[0]; return c ? c.client + (c.ville ? ' · ' + c.ville : '') : ''; };
     var modif = peut('planning');
-    var h = '<div class="head"><h2>Planning</h2><div class="row"><button class="btn ghost small" id="pPrev">◀ Semaine</button><button class="btn ghost small" id="pNow">Cette semaine</button><button class="btn ghost small" id="pNext">Semaine ▶</button></div></div>' +
-      '<p class="muted small" style="margin:0">Semaine du ' + esc(dateFr(du, true)) + ' au ' + esc(dateFr(au, true)) + (modif ? ' · touchez une case pour ajouter une affectation, étirez une affectation par son bord droit pour la recopier sur les jours suivants' : ' · consultation') + '</p>' +
+    var h = '<div class="head"><h2>Planning</h2><div class="row"><button class="btn ghost small" id="pPrev">◀ Semaine</button><button class="btn ghost small" id="pNow">Cette semaine</button><button class="btn ghost small" id="pNext">Semaine ▶</button>' + (gestionnaire() ? '<button class="btn ghost small" id="pAgenda">Google Agenda</button>' : '') + '</div></div>' +
+      '<div class="plq"><input id="plQ" type="search" list="plQl" autocomplete="off" placeholder="Rechercher un chantier, un client, une ville, un code postal…" value="' + esc(S.cache.planQ || '') + '" aria-label="Rechercher dans le planning"><datalist id="plQl">' + chantiers.map(function (c) { return '<option value="' + esc(c.client) + '">' + esc(c.ville || '') + '</option>'; }).join('') + '</datalist><div id="plRes"></div></div>' +
+      '<p class="muted small" style="margin:0">Semaine du ' + esc(dateFr(du, true)) + ' au ' + esc(dateFr(au, true)) + (modif ? ' · touchez une case pour ajouter une affectation, glissez une affectation à la souris pour la déplacer (Ctrl ou Alt : la copier), étirez-la par son bord droit pour la recopier sur les jours suivants' : ' · consultation') + '</p>' +
       '<div class="tablewrap"><table class="planning"><thead><tr><th>Salarié</th>' + jours.map(function (d) { var k = isoJour(d); return '<th class="' + (k === aujourd ? 'today' : '') + '">' + d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }) + '</th>'; }).join('') + '</tr></thead><tbody>' +
       S.annuaire.map(function (u) {
         return '<tr><td><b>' + esc(u.prenom + ' ' + u.nom) + '</b><br><span class="muted small">' + esc(u.poste || '') + '</span></td>' + jours.map(function (d) {
           var k = isoJour(d), cell = evs.filter(function (e) { return e.userId === u.id && e.date === k; });
-          return '<td class="' + (k === aujourd ? 'today' : '') + '" data-cell="' + esc(u.id) + '|' + k + '">' + cell.map(function (e) { var b = '<button class="ev" data-ev="' + esc(e.id) + '"><b>' + esc(e.libelle || nomCh(e.chantierId) || 'Affectation') + '</b>' + esc(nomCh(e.chantierId) && e.libelle ? nomCh(e.chantierId) : '') + (e.debut ? ' ' + esc(e.debut) + (e.fin ? '–' + esc(e.fin) : '') : '') + '</button>'; return modif ? '<div class="evw">' + b + '<span class="evh" data-tire="' + esc(e.id) + '" title="Étirer pour recopier sur les jours suivants" aria-hidden="true"></span></div>' : b; }).join('') + (modif ? '<button class="addcell" data-add="' + esc(u.id) + '|' + k + '" aria-label="Ajouter">+</button>' : '') + '</td>';
+          return '<td class="' + (k === aujourd ? 'today' : '') + '" data-cell="' + esc(u.id) + '|' + k + '">' + cell.map(function (e) { var b = '<button class="ev" data-ev="' + esc(e.id) + '"><b>' + esc(e.libelle || nomCh(e.chantierId) || 'Affectation') + '</b>' + esc(nomCh(e.chantierId) && e.libelle ? nomCh(e.chantierId) : '') + (e.debut ? ' ' + esc(e.debut) + (e.fin ? '–' + esc(e.fin) : '') : '') + (e.ik === 'oui' && gestionnaire() ? ' <span class="ikpill" title="Indemnités km : véhicule personnel">IK</span>' : '') + '</button>'; return modif ? '<div class="evw">' + b + '<span class="evh" data-tire="' + esc(e.id) + '" title="Étirer pour recopier sur les jours suivants" aria-hidden="true"></span></div>' : b; }).join('') + (modif ? '<button class="addcell" data-add="' + esc(u.id) + '|' + k + '" aria-label="Ajouter">+</button>' : '') + '</td>';
         }).join('') + '</tr>';
       }).join('') + '</tbody></table></div>';
     $('view').innerHTML = h;
     $('pPrev').onclick = function () { S.semaine.setDate(S.semaine.getDate() - 7); ouvrir('planning'); };
     $('pNext').onclick = function () { S.semaine.setDate(S.semaine.getDate() + 7); ouvrir('planning'); };
     $('pNow').onclick = function () { S.semaine = lundi(new Date()); ouvrir('planning'); };
+    if ($('pAgenda')) $('pAgenda').onclick = fenetreAgenda;
     $('view').querySelectorAll('[data-add]').forEach(function (b) { b.onclick = function () { var p = b.dataset.add.split('|'); formPlanning({ userId: p[0], date: p[1] }); }; });
-    if (modif) brancherEtirement(evs);
+    if (modif) { brancherEtirement(evs); brancherDeplacement(evs); }
+    brancherRecherchePlanning(evs, nomCh);
     $('view').querySelectorAll('[data-ev]').forEach(function (b) { b.onclick = function () { var e = evs.filter(function (x) { return x.id === b.dataset.ev; })[0]; modif ? formPlanning(e) : modale(e.libelle || 'Affectation', '<p>' + esc(nomDe(e.userId)) + ' · ' + esc(dateFr(e.date, true)) + '</p>' + (e.chantierId ? '<p>Chantier : ' + esc(nomCh(e.chantierId)) + '</p>' : '') + (e.debut ? '<p>Horaires : ' + esc(e.debut) + (e.fin ? ' – ' + esc(e.fin) : '') + '</p>' : '') + (e.note ? '<p class="note">' + esc(e.note) + '</p>' : '') + '<div><button class="btn ghost" onclick="this.closest(\'.modal\').remove()">Fermer</button></div>'); }; });
   });
 };
+/** Recherche rapide dans le planning : met en évidence les affectations de la semaine et liste celles de toutes les semaines. */
+function brancherRecherchePlanning(evs, nomCh) {
+  var q = $('plQ'), res = $('plRes'), minuteur = null;
+  var texte = function (e) { var c = (S.cache.chantiers || []).filter(function (x) { return x.id === e.chantierId; })[0] || {}; return normC([e.libelle, nomCh(e.chantierId), c.cp, c.ville, c.adresse, e.note, nomDe(e.userId)].join(' ')); };
+  var correspond = function (e, mots) { var t = texte(e); return mots.every(function (m) { return t.indexOf(m) >= 0; }); };
+  var lancer = function () {
+    var v = q.value.trim(); S.cache.planQ = v;
+    var mots = normC(v).split(' ').filter(String);
+    $('view').querySelectorAll('.planning [data-ev]').forEach(function (b) { var e = evs.filter(function (x) { return x.id === b.dataset.ev; })[0]; b.classList.toggle('trouve', !!mots.length && !!e && correspond(e, mots)); b.classList.toggle('pale', !!mots.length && !(e && correspond(e, mots))); });
+    if (!mots.length) { res.innerHTML = ''; return; }
+    (S.cache.planTout ? Promise.resolve(S.cache.planTout) : call('list', { table: 'Planning' }).then(function (l) { S.cache.planTout = l; return l; })).then(function (tous) {
+      if (q.value.trim() !== v) return;
+      var auj = isoJour(new Date());
+      var l = tous.filter(function (e) { return correspond(e, mots); }).sort(function (a, b) { var fa = a.date >= auj, fb = b.date >= auj; if (fa !== fb) return fa ? -1 : 1; return fa ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date); });
+      res.innerHTML = l.length ? '<div class="small muted">' + l.length + ' affectation' + (l.length > 1 ? 's' : '') + (l.length > 40 ? ' (40 premières)' : '') + ' · à venir d\'abord</div><div class="plql">' + l.slice(0, 40).map(function (e) {
+        return '<button type="button" data-plgo="' + esc(e.date) + '"' + (e.date < auj ? ' class="passe"' : '') + '><b>' + esc(dateFr(e.date, true)) + '</b> · ' + esc(nomDe(e.userId)) + ' · ' + esc(e.libelle || nomCh(e.chantierId) || 'Affectation') + (e.libelle && nomCh(e.chantierId) ? ' <span class="muted">(' + esc(nomCh(e.chantierId)) + ')</span>' : '') + '</button>';
+      }).join('') + '</div>' : '<div class="small muted">Aucune affectation trouvée.</div>';
+      res.querySelectorAll('[data-plgo]').forEach(function (b) { b.onclick = function () { S.semaine = lundi(new Date(b.dataset.plgo + 'T12:00:00')); ouvrir('planning'); }; });
+    }).catch(echec);
+  };
+  q.addEventListener('input', function () { clearTimeout(minuteur); minuteur = setTimeout(lancer, 200); });
+  q.addEventListener('keydown', function (k) { if (k.key === 'Escape') { q.value = ''; lancer(); } });
+  S.cache.planTout = null;   // relu à chaque affichage du planning : toujours à jour
+  if (q.value) lancer();
+}
+/** Glisser-déposer à la souris : l'affectation va sur la case où on la lâche (autre jour, autre salarié).
+ *  Avec Ctrl (ou Alt / ⌥) au lâcher, elle est copiée au lieu d'être déplacée. Un simple clic ouvre toujours la fiche. */
+function brancherDeplacement(evs) {
+  $('view').querySelectorAll('.evw .ev[data-ev]').forEach(function (bouton) {
+    bouton.addEventListener('pointerdown', function (ev) {
+      if (ev.pointerType !== 'mouse' || ev.button !== 0) return;
+      var e = evs.filter(function (x) { return x.id === bouton.dataset.ev; })[0]; if (!e) return;
+      var x0 = ev.clientX, y0 = ev.clientY, glisse = false, fantome = null, cible = null;
+      var depart = bouton.closest('td[data-cell]');
+      var bouge = function (m) {
+        if (!glisse && Math.abs(m.clientX - x0) + Math.abs(m.clientY - y0) < 6) return;
+        if (!glisse) {
+          glisse = true; document.body.classList.add('deplace');
+          fantome = bouton.cloneNode(true); fantome.className = 'ev fantome'; fantome.style.width = bouton.offsetWidth + 'px';
+          document.body.appendChild(fantome); bouton.classList.add('source');
+        }
+        fantome.style.left = (m.clientX + 8) + 'px'; fantome.style.top = (m.clientY + 8) + 'px';
+        fantome.classList.toggle('copie', m.ctrlKey || m.altKey || m.metaKey);
+        var td = document.elementFromPoint(m.clientX, m.clientY); td = td && td.closest ? td.closest('td[data-cell]') : null;
+        if (td !== cible) { if (cible) cible.classList.remove('depot'); cible = td; if (cible && cible !== depart) cible.classList.add('depot'); }
+      };
+      var fin = function (m) {
+        document.removeEventListener('pointermove', bouge); document.removeEventListener('pointerup', fin);
+        if (!glisse) return;
+        document.body.classList.remove('deplace'); bouton.classList.remove('source'); if (fantome) fantome.remove(); if (cible) cible.classList.remove('depot');
+        bouton.addEventListener('click', function stop(c) { c.stopImmediatePropagation(); c.preventDefault(); bouton.removeEventListener('click', stop, true); }, true);
+        setTimeout(function () { bouton.blur(); }, 0);
+        if (!cible || cible === depart) return;
+        var p = cible.dataset.cell.split('|'), copie = m.ctrlKey || m.altKey || m.metaKey;
+        var row = ikLigne({ userId: p[0], date: p[1], chantierId: e.chantierId || '', libelle: e.libelle || '', debut: e.debut || '', fin: e.fin || '', note: e.note || '', ik: e.ik });
+        if (!copie) row.id = e.id;
+        call('save', { table: 'Planning', row: row }).then(function () { toast(copie ? 'Affectation copiée.' : 'Affectation déplacée.'); ouvrir('planning'); }).catch(echec);
+      };
+      document.addEventListener('pointermove', bouge); document.addEventListener('pointerup', fin);
+    });
+  });
+}
 /** Étirer une affectation par son bord droit : elle est recopiée sur les jours suivants de la même ligne (souris ou doigt). */
 function brancherEtirement(evs) {
   $('view').querySelectorAll('[data-tire]').forEach(function (poignee) {
@@ -1327,7 +1415,7 @@ function brancherEtirement(evs) {
         // pas de doublon : un jour qui a déjà la même affectation est sauté
         var dates = choisies.map(function (c) { return c.dataset.cell.split('|')[1]; }).filter(function (d) { return !evs.some(function (x) { return x.userId === e.userId && x.date === d && x.chantierId === e.chantierId && x.libelle === e.libelle; }); });
         if (!dates.length) return;
-        var row = { userId: e.userId, chantierId: e.chantierId || '', libelle: e.libelle || '', debut: e.debut || '', fin: e.fin || '', note: e.note || '' };
+        var row = ikLigne({ userId: e.userId, chantierId: e.chantierId || '', libelle: e.libelle || '', debut: e.debut || '', fin: e.fin || '', note: e.note || '', ik: e.ik });
         call('savePlanningSerie', { row: row, dates: dates }).then(function (l) { toast(l.length + ' jour' + (l.length > 1 ? 's' : '') + ' ajouté' + (l.length > 1 ? 's' : '') + '.'); ouvrir('planning'); }).catch(echec);
       };
       var annule = function () { choisies = []; fin(); };
@@ -1345,6 +1433,8 @@ function joursEntre(du, au, jours) {
   while (d <= fin && out.length < 400) { if (jours.indexOf(String(d.getDay())) >= 0) out.push(isoJour(d)); d.setDate(d.getDate() + 1); }
   return out;
 }
+/** Case « Indemnités km » : seulement pour le responsable et les administratifs (« oui » = véhicule personnel ce jour-là). */
+function ikLigne(d) { if (gestionnaire()) d.ik = d.ik === true || d.ik === 'oui' ? 'oui' : ''; else delete d.ik; return d; }
 function formPlanning(e) {
   var ch = S.cache.chantiers || [], nouveau = !e.id;
   var selUser = '<label class="f">Salarié<select name="userId">' + S.annuaire.map(function (u) { return '<option value="' + esc(u.id) + '"' + (u.id === e.userId ? ' selected' : '') + '>' + esc(u.prenom + ' ' + u.nom) + '</option>'; }).join('') + '</select></label>';
@@ -1357,6 +1447,7 @@ function formPlanning(e) {
     '<form id="plF" style="display:grid;gap:10px">' + champDates +
     '<label class="f">Chantier<select name="chantierId"><option value="">— Aucun —</option>' + ch.map(function (c) { return '<option value="' + esc(c.id) + '"' + (c.id === e.chantierId ? ' selected' : '') + '>' + esc(c.client + (c.ville ? ' · ' + c.ville : '')) + '</option>'; }).join('') + '</select></label>' +
     '<label class="f">Libellé<input name="libelle" maxlength="120" value="' + esc(e.libelle) + '" placeholder="Ex. Soufflage combles, dépôt, formation, congés…"></label><div class="fgrid"><label class="f">Début<input type="time" name="debut" value="' + esc(e.debut) + '"></label><label class="f">Fin<input type="time" name="fin" value="' + esc(e.fin) + '"></label></div><label class="f">Note<textarea name="note" maxlength="2000">' + esc(e.note) + '</textarea></label>' +
+    (gestionnaire() ? '<label class="small ikcase"><input type="checkbox" name="ik"' + (e.ik === 'oui' ? ' checked' : '') + '> <b>Indemnités km</b> : il a pris son véhicule personnel ce jour-là</label>' : '') +
     '<div class="autosave" id="plAuto"></div><div class="row"><button class="btn primary">Enregistrer</button>' + (e.id ? '<button type="button" class="btn danger" id="plDel">Supprimer ce jour</button>' : '') + (e.serie ? '<button type="button" class="btn danger" id="plDelSerie">Supprimer toute la série</button>' : '') + '<button type="button" class="btn ghost" id="plX">' + (e.id ? 'Fermer' : 'Annuler') + '</button></div></form>');
   function datesChoisies() {
     var f = $('plF'), jours = [];
@@ -1365,7 +1456,7 @@ function formPlanning(e) {
   }
   function compter() { if (!nouveau) return; var n = datesChoisies().length; $('plCompte').textContent = n ? n + ' jour' + (n > 1 ? 's' : '') + ' seront planifiés' + (n > 1 ? ' (du ' + dateFr(datesChoisies()[0]) + ' au ' + dateFr(datesChoisies()[n - 1]) + ')' : '') + '.' : 'Aucun jour ne correspond : vérifiez les dates et les jours cochés.'; }
   if (nouveau) { $('plF').addEventListener('input', compter); $('plF').addEventListener('change', compter); compter(); }
-  var asP = e.id ? autoSave($('plF'), { ind: $('plAuto'), valide: function (d) { return !!d.date; }, save: function (d) { d.id = e.id; return call('save', { table: 'Planning', row: d }); } }) : null;
+  var asP = e.id ? autoSave($('plF'), { ind: $('plAuto'), valide: function (d) { return !!d.date; }, save: function (d) { d.id = e.id; ikLigne(d); return call('save', { table: 'Planning', row: d }); } }) : null;
   var brP = nouveau ? brouillon($('plF'), 'planning', $('plAuto'), ['userId', 'date', 'au']) : null;
   // au départ, seul le jour choisi est coché ; dès qu'une date « Au » est saisie, lundi à vendredi sont cochés en plus
   if (nouveau) {
@@ -1389,7 +1480,7 @@ function formPlanning(e) {
   $('plX').onclick = function () { m.fermer(); };
   $('plF').onsubmit = function (ev) {
     ev.preventDefault(); m.avantFermeture = null;
-    var row = formData($('plF')); delete row.au;
+    var row = formData($('plF')); delete row.au; ikLigne(row);
     var p;
     if (nouveau) {
       var dates = datesChoisies();
@@ -1459,10 +1550,77 @@ VUES.chantiers = function () {
     if (modif) $('chAdd').onclick = function () { formChantier({ statut: 'À planifier' }); };
   });
 };
+/* ---------- Code postal ↔ ville (base officielle des communes : geo.api.gouv.fr) ---------- */
+var GEO_API = 'https://geo.api.gouv.fr/communes';
+var geoCache = {};
+function geoCommunes(param, valeur) {
+  var cle = param + '=' + valeur.toLowerCase();
+  if (geoCache[cle]) return geoCache[cle];
+  var url = GEO_API + '?' + param + '=' + encodeURIComponent(valeur) + '&fields=nom,codesPostaux,departement&boost=population&limit=12';
+  return (geoCache[cle] = fetch(url).then(function (r) { if (!r.ok) throw new Error('geo'); return r.json(); }).catch(function () { delete geoCache[cle]; return []; }));
+}
+function listeGeo(input, valeurs) {
+  var id = input.getAttribute('list') || ('geo' + Math.random().toString(36).slice(2, 8)), dl = document.getElementById(id);
+  if (!dl) { dl = document.createElement('datalist'); dl.id = id; input.parentNode.appendChild(dl); input.setAttribute('list', id); }
+  dl.innerHTML = valeurs.map(function (v) { return '<option value="' + esc(v) + '">'; }).join('');
+}
+/** Deux champs séparés : le code postal remplit la ville, la ville remplit le code postal (propositions s'il y en a plusieurs). */
+function brancherCpVille(cp, ville) {
+  if (!cp || !ville) return;
+  var auto = { cp: false, ville: false }, m1 = null, m2 = null;
+  var parCp = function () {
+    var v = cp.value.replace(/\s/g, '');
+    if (!/^\d{5}$/.test(v)) return;
+    geoCommunes('codePostal', v).then(function (l) {
+      if (cp.value.replace(/\s/g, '') !== v || !l.length) return;
+      listeGeo(ville, l.map(function (c) { return c.nom; }));
+      if (!ville.value.trim() || auto.ville) { ville.value = l[0].nom; auto.ville = true; ville.dispatchEvent(new Event('input', { bubbles: true })); }
+    });
+  };
+  var parVille = function () {
+    var v = ville.value.trim();
+    if (v.length < 2 || auto.ville) return;
+    geoCommunes('nom', v).then(function (l) {
+      if (ville.value.trim() !== v || !l.length) return;
+      listeGeo(ville, l.map(function (c) { return c.nom; }));
+      var exact = l.filter(function (c) { return normC(c.nom).trim() === normC(v).trim(); })[0];
+      if (!exact) return;
+      listeGeo(cp, exact.codesPostaux);
+      if (!cp.value.trim() || auto.cp) { cp.value = exact.codesPostaux[0]; auto.cp = true; cp.dispatchEvent(new Event('input', { bubbles: true })); }
+    });
+  };
+  cp.addEventListener('input', function (e) { if (e.isTrusted) auto.cp = false; clearTimeout(m1); m1 = setTimeout(parCp, 250); });
+  ville.addEventListener('input', function (e) { if (e.isTrusted) auto.ville = false; clearTimeout(m2); m2 = setTimeout(parVille, 350); });
+}
+/** Un seul champ « Code postal et ville » : « 56460 » devient « 56460 Lizio », « Lizio » devient « 56460 Lizio ». */
+function brancherCpVilleUnique(champ) {
+  if (!champ) return;
+  var m = null;
+  var completer = function () {
+    var v = champ.value.trim(), mc = /^(\d{5})$/.exec(v);
+    if (mc) return geoCommunes('codePostal', mc[1]).then(function (l) {
+      if (champ.value.trim() !== v || !l.length) return;
+      listeGeo(champ, l.map(function (c) { return mc[1] + ' ' + c.nom; }));
+      if (l.length === 1) { champ.value = mc[1] + ' ' + l[0].nom; champ.dispatchEvent(new Event('input', { bubbles: true })); }
+    });
+    if (v.length >= 2 && !/\d/.test(v)) return geoCommunes('nom', v).then(function (l) {
+      if (champ.value.trim() !== v || !l.length) return;
+      var props = []; l.forEach(function (c) { c.codesPostaux.slice(0, 3).forEach(function (k) { props.push(k + ' ' + c.nom); }); });
+      listeGeo(champ, props.slice(0, 15));
+    });
+  };
+  champ.addEventListener('input', function (e) { if (!e.isTrusted) return; clearTimeout(m); m = setTimeout(completer, 300); });
+  champ.addEventListener('change', function () {
+    var v = champ.value.trim();
+    if (!v || /\d/.test(v)) return;
+    geoCommunes('nom', v).then(function (l) { var x = l.filter(function (c) { return normC(c.nom).trim() === normC(v).trim(); })[0]; if (x && champ.value.trim() === v) { champ.value = x.codesPostaux[0] + ' ' + x.nom; champ.dispatchEvent(new Event('input', { bubbles: true })); } });
+  });
+}
 function formChantier(c) {
   var m = modale(c.id ? 'Modifier le chantier' : 'Nouveau chantier', '<form id="chF" style="display:grid;gap:10px"><label class="f">Client<input name="client" required maxlength="120" value="' + esc(c.client) + '"></label><label class="f">Adresse<input name="adresse" maxlength="200" value="' + esc(c.adresse) + '"></label><div class="fgrid"><label class="f">Code postal<input name="cp" maxlength="10" value="' + esc(c.cp) + '"></label><label class="f">Ville<input name="ville" maxlength="80" value="' + esc(c.ville) + '"></label></div>' +
     '<div class="fgrid"><label class="f">Début<input type="date" name="dateDebut" value="' + esc(c.dateDebut) + '"></label><label class="f">Fin<input type="date" name="dateFin" value="' + esc(c.dateFin) + '"></label><label class="f">Statut<select name="statut">' + STATUTS.map(function (s) { return '<option' + (s === c.statut ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select></label></div>' +
     '<div class="autosave" id="chAuto"></div><div class="row"><button class="btn primary">Enregistrer</button>' + (c.id && superAdmin() ? '<button type="button" class="btn danger" id="chDel">Supprimer</button>' : '') + '<button type="button" class="btn ghost" id="chX">' + (c.id ? 'Fermer' : 'Annuler') + '</button></div></form>');
+  brancherCpVille($('chF').querySelector('[name=cp]'), $('chF').querySelector('[name=ville]'));
   var ligneCh = function (d) { var row = Object.assign({}, c, d); delete row.auteur; delete row.maj; return row; };
   var asC = c.id ? autoSave($('chF'), { ind: $('chAuto'), valide: function (d) { return !!d.client.trim(); }, save: function (d) { return call('save', { table: 'Chantiers', row: ligneCh(d) }).then(function (r) { Object.assign(c, r); }); } }) : null;
   var brC = c.id ? null : brouillon($('chF'), 'chantier', $('chAuto'));
@@ -2066,6 +2224,7 @@ VUES.calculateur = function () {
         .catch(function (e) { $('clAuto').textContent = 'Non enregistré : ' + e.message; throw e; });
     }
     lignesHtml(); afficherResultat(P, C);
+    brancherCpVilleUnique(f.querySelector('[name=ville]'));
     f.addEventListener('input', maj); f.addEventListener('change', maj);
     $('clAdd').onclick = function () { lire(); C.lignes.push({ type: C.lignes[C.lignes.length - 1].type || 'mur', desc: '', surface: '', ep: '', perte: P.perteVolume }); lignesHtml(); maj(); };
     $('clDist').onclick = function () {
@@ -3526,15 +3685,159 @@ function vueReglages(D, P, gestion) {
 }
 /* @@COMPTA-UI-FIN */
 
+/* ===================== INDEMNITÉS KILOMÉTRIQUES ===================== */
+// Barème fiscal (repris de l'outil « Indemnités kilométriques ») : d × taux (+ forfait) selon la puissance ; véhicule électrique +20 %.
+var BAREME_IK = {
+  3: [[5000, 0.529], [20000, 0.316, 1065], [Infinity, 0.370]], 4: [[5000, 0.606], [20000, 0.340, 1330], [Infinity, 0.407]],
+  5: [[5000, 0.636], [20000, 0.357, 1395], [Infinity, 0.427]], 6: [[5000, 0.665], [20000, 0.374, 1457], [Infinity, 0.447]],
+  7: [[5000, 0.697], [20000, 0.394, 1515], [Infinity, 0.470]]
+};
+function montantIk(km, cv, electrique) {
+  var t = BAREME_IK[Math.min(7, Math.max(3, +cv || 4))], m = km <= t[0][0] ? km * t[0][1] : km <= t[1][0] ? km * t[1][1] + t[1][2] : km * t[2][1];
+  return electrique ? m * 1.2 : m;
+}
+VUES.ik = function () {
+  var P = S.cache.ikP || (S.cache.ikP = { userId: S.user.id, annee: String(new Date().getFullYear()), onglet: 'calcul' });
+  return call('ikDonnees', { userId: P.userId, annee: P.annee }).then(function (D) { dessinerIk(D, P); });
+};
+function dessinerIk(D, P, info) {
+  var modif = peut('ik'), R = D.reglages, an = new Date().getFullYear();
+  var parJour = {}; D.trajets.forEach(function (t) { (parJour[t.date] = parJour[t.date] || []).push(t); });
+  var totalKm = 0, manquants = 0;
+  Object.keys(parJour).forEach(function (d) { parJour[d].forEach(function (t) { if (t.km === '' || t.km == null) manquants++; else totalKm += nb(t.km); }); totalKm += nb((D.jours[d] || {}).retour); });
+  var total = montantIk(totalKm, R.cv, R.electrique), taux = totalKm ? total / totalKm : 0;
+  var aCalculer = Object.keys(D.jours).filter(function (d) { return !D.jours[d].calcule && D.jours[d].points.length; }).length;
+  var h = '<div class="head"><h2>Indemnités kilométriques</h2><span class="meta">Trajets en véhicule personnel · barème fiscal</span></div>' +
+    '<div class="row" role="tablist"><button class="btn small ' + (P.onglet === 'calcul' ? 'primary' : 'ghost') + '" data-iko="calcul">Calcul</button>' + (modif ? '<button class="btn small ' + (P.onglet === 'collab' ? 'primary' : 'ghost') + '" data-iko="collab">Collaborateurs</button>' : '') + '</div>';
+  if (P.onglet === 'collab' && modif) {
+    h += '<p class="muted small" style="margin:0">Véhicule et adresse de départ de chacun. Les trajets comptés sont les affectations du planning où la case « Indemnités km » est cochée (véhicule personnel), plus les trajets ajoutés à la main.</p>' +
+      '<div class="tablewrap"><table><thead><tr><th>Collaborateur</th><th>Puissance fiscale</th><th>Électrique</th><th>Adresse de départ (domicile)</th><th></th></tr></thead><tbody>' +
+      D.collaborateurs.map(function (c) { return '<tr data-ikc="' + esc(c.id) + '"><td><b>' + esc(c.nom) + '</b></td><td><select data-k="cv">' + [3, 4, 5, 6, 7].map(function (v) { return '<option value="' + v + '"' + (+c.reglages.cv === v ? ' selected' : '') + '>' + (v === 3 ? '3 CV et moins' : v === 7 ? '7 CV et plus' : v + ' CV') + '</option>'; }).join('') + '</select></td><td><input type="checkbox" data-k="electrique"' + (c.reglages.electrique ? ' checked' : '') + '></td><td><input data-k="domicile" maxlength="200" value="' + esc(c.reglages.domicile) + '" style="width:100%;min-width:220px;padding:7px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2)"></td><td><button class="btn ghost small" data-iks="' + esc(c.id) + '">Enregistrer</button></td></tr>'; }).join('') + '</tbody></table></div>';
+    $('view').innerHTML = h;
+  } else {
+    h += '<div class="card"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"><label class="f">Collaborateur<select id="ikU">' + D.collaborateurs.map(function (c) { return '<option value="' + esc(c.id) + '"' + (c.id === D.userId ? ' selected' : '') + '>' + esc(c.nom) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="f">Année<select id="ikA">' + [an + 1, an, an - 1, an - 2].map(function (a) { return '<option' + (String(a) === D.annee ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></label>' +
+      '<div><span class="tag">Véhicule</span><div class="small">' + (R.cv === 3 ? '3 CV et moins' : R.cv === 7 ? '7 CV et plus' : R.cv + ' CV') + (R.electrique ? ' · électrique (+20 %)' : '') + '<br><span class="muted">Départ : ' + esc(R.domicile) + '</span></div></div></div></div>' +
+      (info ? '<div class="card" style="border-color:var(--warn)"><span class="small">' + esc(info) + '</span></div>' : '') +
+      '<div class="grid"><div class="card"><span class="tag">Trajets</span><b style="font-size:22px">' + D.trajets.length + '</b></div><div class="card"><span class="tag">Km cumulés (aller-retour)</span><b style="font-size:22px">' + num1(totalKm) + ' km</b></div><div class="card"><span class="tag">Km à calculer</span><b style="font-size:22px">' + manquants + '</b><span class="muted small">' + aCalculer + ' journée(s) à calculer</span></div><div class="card"><span class="tag">Indemnité ' + esc(D.annee) + '</span><b style="font-size:22px">' + eur(total) + '</b><span class="muted small">' + (totalKm ? eur(taux, 3).replace(' €', '') + ' €/km en moyenne' : '') + '</span></div></div>' +
+      '<div class="row">' + (modif ? '<button class="btn primary small" id="ikCalc"' + (aCalculer ? '' : ' disabled') + '>Calculer les distances' + (aCalculer ? ' (' + aCalculer + ' j)' : '') + '</button><button class="btn ghost small" id="ikAdd">+ Ajouter un trajet</button><label class="btn ghost small upl">Importer l\'ancien outil (CSV)<input type="file" accept=".csv,text/csv" id="ikImp"></label>' : '') + '<button class="btn ghost small" id="ikCsv">Exporter en CSV</button></div>' +
+      (D.trajets.length ? '<div class="tablewrap"><table><thead><tr><th>Date</th><th>Client / lieu</th><th>Adresse</th><th>Km</th><th style="text-align:right">Indemnité</th><th></th></tr></thead><tbody>' +
+        Object.keys(parJour).sort().map(function (d) {
+          var j = D.jours[d] || {}, tj = 0;
+          var lignes = parJour[d].map(function (t, i) {
+            var km = t.km === '' || t.km == null ? null : nb(t.km); tj += km || 0;
+            var tag = t.kmMode === 'manuel' ? '<span class="ik-tag manuel">manuel</span>' : km != null ? '<span class="ik-tag">auto</span>' : '';
+            return '<tr' + (i === 0 ? ' class="ik-jour"' : '') + '><td class="small">' + (i === 0 ? esc(dateFr(d)) : '') + '</td><td>' + esc(t.libelle) + ' <span class="pill" style="font-size:10px">' + (t.source === 'planning' ? 'planning' : 'ajouté') + '</span></td><td class="small muted">' + esc(t.adresse || '— adresse manquante') + '</td>' +
+              '<td style="white-space:nowrap">' + (modif ? '<input class="ik-km" type="number" min="0" step="0.1" data-ikkm="' + esc(t.id) + '" value="' + (km == null ? '' : km) + '">' : (km == null ? '—' : num1(km))) + ' ' + tag + (modif && t.kmMode === 'manuel' ? ' <button class="btn ghost small" data-ikauto="' + esc(t.id) + '">auto</button>' : '') + '</td>' +
+              '<td style="text-align:right">' + (km ? eur(km * taux) : '<span class="muted">—</span>') + '</td><td>' + (modif && t.source !== 'planning' ? '<button class="btn danger small" data-ikdel="' + esc(t.id) + '">✕</button>' : '') + '</td></tr>';
+          }).join('');
+          if (j.retour != null) tj += j.retour;
+          return lignes + (j.retour != null ? '<tr class="ik-retour"><td></td><td colspan="2">Retour au domicile</td><td>' + num1(j.retour) + ' km</td><td style="text-align:right">' + eur(j.retour * taux) + '</td><td></td></tr>' : '') +
+            '<tr class="ik-total"><td></td><td colspan="2">Total du jour (aller-retour)' + (j.points && j.points.length && !j.calcule ? ' <span class="pill warn">à calculer</span>' : '') + '</td><td>' + num1(tj) + ' km</td><td style="text-align:right">' + eur(tj * taux) + '</td><td></td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty">Aucun trajet pour ' + esc(D.nom) + ' en ' + esc(D.annee) + '. Cochez « Indemnités km » sur ses affectations du planning, ou ajoutez un trajet.</div>') +
+      '<p class="muted small">Chaque journée : domicile → rendez-vous dans l\'ordre des horaires → retour au domicile, calculé par Google Maps. Un km corrigé à la main passe en « manuel » et n\'est plus recalculé. Le barème est progressif sur le total de l\'année ; le montant par trajet est une répartition indicative.</p>';
+    $('view').innerHTML = h;
+  }
+  var recharger = function (x, msg) { dessinerIk(x, P, msg); };
+  $('view').querySelectorAll('[data-iko]').forEach(function (b) { b.onclick = function () { P.onglet = b.dataset.iko; dessinerIk(D, P); }; });
+  if ($('ikU')) $('ikU').onchange = function () { P.userId = $('ikU').value; ouvrir('ik'); };
+  if ($('ikA')) $('ikA').onchange = function () { P.annee = $('ikA').value; ouvrir('ik'); };
+  if ($('ikCalc')) $('ikCalc').onclick = function () { var b = $('ikCalc'); b.disabled = true; b.textContent = 'Calcul en cours…'; call('ikCalculer', { userId: D.userId, annee: D.annee }).then(function (x) { recharger(x, x.erreurs ? x.erreurs + ' journée(s) non calculée(s) : adresse introuvable ou quota Google Maps du jour atteint. Corrigez l\'adresse du chantier ou saisissez les km à la main.' : ''); toast(x.calcules + ' journée(s) calculée(s).'); }).catch(function (e) { b.disabled = false; b.textContent = 'Calculer les distances'; echec(e); }); };
+  $('view').querySelectorAll('[data-ikkm]').forEach(function (inp) { inp.onchange = function () {
+    var t = D.trajets.filter(function (x) { return x.id === inp.dataset.ikkm; })[0], km = inp.value === '' ? '' : String(nb(inp.value));
+    var row = t.source === 'planning' ? { id: t.correctionId || '', userId: D.userId, date: t.date, heure: t.heure, libelle: t.libelle, planningId: t.planningId, km: km, kmMode: km === '' ? '' : 'manuel' } : { id: t.id, km: km, kmMode: km === '' ? '' : 'manuel' };
+    call('save', { table: 'IKTrajets', row: row }).then(function () { return call('ikDonnees', { userId: D.userId, annee: D.annee }); }).then(function (x) { recharger(x); }).catch(echec);
+  }; });
+  $('view').querySelectorAll('[data-ikauto]').forEach(function (b) { b.onclick = function () {
+    var t = D.trajets.filter(function (x) { return x.id === b.dataset.ikauto; })[0];
+    (t.source === 'planning' ? call('remove', { table: 'IKTrajets', id: t.correctionId }) : call('save', { table: 'IKTrajets', row: { id: t.id, km: '', kmMode: '' } }))
+      .then(function () { return call('ikDonnees', { userId: D.userId, annee: D.annee }); }).then(function (x) { recharger(x); }).catch(echec);
+  }; });
+  $('view').querySelectorAll('[data-ikdel]').forEach(function (b) { b.onclick = function () { if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Confirmer'; return; } call('remove', { table: 'IKTrajets', id: b.dataset.ikdel }).then(function () { ouvrir('ik'); }).catch(echec); }; });
+  if ($('ikAdd')) $('ikAdd').onclick = function () {
+    var m = modale('Ajouter un trajet', '<form id="ikF" style="display:grid;gap:10px"><div class="fgrid"><label class="f">Date<input type="date" name="date" required value="' + isoJour(new Date()) + '"></label><label class="f">Heure<input type="time" name="heure" value="09:00"></label></div><label class="f">Client / lieu<input name="libelle" required maxlength="150"></label><label class="f">Adresse<input name="adresse" maxlength="300" placeholder="n°, rue, code postal, ville"></label><div class="row"><button class="btn primary">Ajouter</button><button type="button" class="btn ghost" id="ikFX">Annuler</button></div></form>');
+    $('ikFX').onclick = function () { m.fermer(); };
+    $('ikF').onsubmit = function (ev) { ev.preventDefault(); var d = formData($('ikF')); d.userId = D.userId; call('save', { table: 'IKTrajets', row: d }).then(function () { m.remove(); if (d.date.slice(0, 4) !== P.annee) P.annee = d.date.slice(0, 4); ouvrir('ik'); }).catch(echec); };
+  };
+  if ($('ikImp')) $('ikImp').onchange = function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var r = new FileReader();
+    r.onload = function () {
+      var l = decouperCsv(String(r.result)), en = l[0] || [], ix = function (re) { for (var i = 0; i < en.length; i++) if (re.test(normC(en[i]))) return i; return -1; };
+      var iD = ix(/^date/), iH = ix(/heure/), iC = ix(/client|lieu/), iA = ix(/adresse/), iK = ix(/^km/), iM = ix(/mode/);
+      if (iD < 0 || iC < 0) { toast('Fichier non reconnu : il faut au moins les colonnes Date et Client / lieu.'); return; }
+      var lignes = l.slice(1).map(function (x) { return { date: dateTableau(x[iD]), heure: iH >= 0 ? x[iH] : '', libelle: x[iC], adresse: iA >= 0 ? x[iA] : '', km: iK >= 0 ? String(x[iK]).replace(/\s/g, '').replace(',', '.') : '', manuel: iM >= 0 && /manuel/i.test(x[iM]) }; }).filter(function (x) { return x.date && x.libelle; });
+      call('ikImporter', { userId: D.userId, annee: D.annee, lignes: lignes }).then(function (x) { toast(x.importes + ' trajet(s) repris. Cliquez sur « Calculer les distances ».'); recharger(x); }).catch(echec);
+    };
+    r.readAsText(f, 'utf-8'); e.target.value = '';
+  };
+  if ($('ikCsv')) $('ikCsv').onclick = function () {
+    var lignes = [], mois = {};
+    Object.keys(parJour).sort().forEach(function (d) {
+      var j = D.jours[d] || {};
+      parJour[d].forEach(function (t) { var km = nb(t.km); lignes.push([dateFr(d), t.heure, t.libelle, t.adresse, km, t.kmMode === 'manuel' ? 'Manuel' : km ? 'Auto (Google Maps)' : 'À calculer', km * taux]); var k = d.slice(0, 7); mois[k] = mois[k] || [0, 0]; mois[k][0] += km; mois[k][1] += km * taux; });
+      if (j.retour != null) { lignes.push([dateFr(d), '', 'Retour domicile', R.domicile, j.retour, 'Auto (Google Maps)', j.retour * taux]); var k2 = d.slice(0, 7); mois[k2] = mois[k2] || [0, 0]; mois[k2][0] += j.retour; mois[k2][1] += j.retour * taux; }
+    });
+    lignes.push([], ['TOTAL', '', D.nom, '', totalKm, (R.cv === 7 ? '7 CV et plus' : R.cv + ' CV') + (R.electrique ? ' électrique' : ''), total], [], ['Récapitulatif mensuel'], ['Mois', '', '', '', 'Km', '', 'Indemnité (EUR)']);
+    Object.keys(mois).sort().forEach(function (k) { lignes.push([new Date(k + '-15').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }), '', '', '', mois[k][0], '', mois[k][1]]); });
+    telechargerCsv('indemnites-km-' + D.nom.replace(/[^\w]+/g, '-') + '-' + D.annee + '.csv', ['Date', 'Heure', 'Client / lieu', 'Adresse', 'Km', 'Mode', 'Indemnité (EUR)'], lignes);
+  };
+  $('view').querySelectorAll('[data-iks]').forEach(function (b) { b.onclick = function () {
+    var tr = b.closest('tr'), g = {}; tr.querySelectorAll('[data-k]').forEach(function (el) { g[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value; });
+    b.disabled = true; call('ikReglages', { userId: b.dataset.iks, annee: P.annee, reglages: g }).then(function () { b.disabled = false; toast('Enregistré.'); }).catch(function (e) { b.disabled = false; echec(e); });
+  }; });
+}
+
+/* ---------- Mon agenda : invitation Google Agenda et lien iCal personnel ---------- */
+function carteAgenda(a) {
+  var z = $('agCarte'); if (!z) return;
+  z.innerHTML = '<span class="tag">Mon agenda</span>' +
+    '<label class="small" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="agInv"' + (a.invit ? ' checked' : '') + '> Recevoir mes affectations du planning en invitation dans mon Google Agenda</label>' +
+    '<div class="fgrid"><label class="f">Adresse de mon agenda Google<input id="agMail" type="email" maxlength="120" value="' + esc(a.email) + '" placeholder="' + esc(a.emailProfil || 'prenom.nom@gmail.com') + '"></label></div>' +
+    '<p class="muted small" style="margin:0">' + (a.emailProfil || a.email ? 'Sans adresse ici, l\'adresse e-mail de votre profil est utilisée. ' : 'Indiquez une adresse Gmail (ici ou dans votre profil) pour recevoir les invitations. ') + 'Acceptez l\'invitation reçue : ensuite, chaque modification du planning se met à jour dans votre agenda.' + (a.actif ? '' : ' <b>L\'agenda de l\'entreprise n\'est pas encore activé par le responsable.</b>') + '</p>' +
+    '<div class="row"><button class="btn primary small" id="agOk">Enregistrer</button></div>' +
+    '<details><summary class="small"><b>Autre agenda (iPhone, Outlook) ou sans compte Gmail : mon lien personnel</b></summary><div style="display:grid;gap:8px;margin-top:8px">' +
+    '<div class="row"><input id="agIcs" readonly value="' + esc(a.ics) + '" style="flex:1;min-width:220px;padding:8px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2);font-size:12px"><button class="btn ghost small" id="agCopie">Copier</button></div>' +
+    (a.icsEquipe ? '<div class="row"><input readonly value="' + esc(a.icsEquipe) + '" style="flex:1;min-width:220px;padding:8px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2);font-size:12px" id="agIcsE"><button class="btn ghost small" id="agCopieE">Copier (toute l\'équipe)</button></div>' : '') +
+    '<ul class="small muted" style="margin:0;padding-left:18px"><li>Google Agenda (ordinateur) : « Autres agendas » › « + » › « À partir de l\'URL », collez le lien.</li><li>iPhone : Réglages › Calendrier › Comptes › Ajouter un compte › Autre › « Ajouter un calendrier avec abonnement ».</li><li>Ce lien est mis à jour par l\'agenda toutes les quelques heures. Il est personnel : ne le partagez pas.</li></ul>' +
+    '<div><button class="btn ghost small" id="agNouv">Créer un nouveau lien (l\'ancien ne marchera plus)</button></div></div></details>';
+  var copier = function (id) { var i = $(id); i.select(); try { navigator.clipboard.writeText(i.value).then(function () { toast('Lien copié.'); }, function () { document.execCommand('copy'); toast('Lien copié.'); }); } catch (e) { document.execCommand('copy'); toast('Lien copié.'); } };
+  $('agCopie').onclick = function () { copier('agIcs'); };
+  if ($('agCopieE')) $('agCopieE').onclick = function () { copier('agIcsE'); };
+  $('agOk').onclick = function () { var b = $('agOk'); b.disabled = true; call('saveMonAgenda', { invit: $('agInv').checked, email: $('agMail').value.trim() }).then(function (x) { toast('Agenda enregistré.'); carteAgenda(x); }).catch(function (e) { b.disabled = false; echec(e); }); };
+  $('agNouv').onclick = function () { var b = $('agNouv'); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Confirmer : nouveau lien'; return; } call('nouveauLienIcs').then(function (x) { toast('Nouveau lien créé : remplacez-le dans votre agenda.'); carteAgenda(x); }).catch(echec); };
+}
+/** Agenda Google de l'entreprise : activation, resynchronisation (responsable et administratifs). */
+function fenetreAgenda() {
+  var m = modale('Google Agenda', '<div id="agZ"><p class="muted">Chargement…</p></div>');
+  var dessiner = function (e) {
+    $('agZ').innerHTML = (e.actif
+      ? '<p style="margin:0">✓ Le planning est recopié dans l\'agenda Google <b>« ' + esc(e.nom) + ' »</b> de votre compte. Chaque ajout, déplacement ou suppression dans l\'intranet s\'y reporte aussitôt, et le collaborateur concerné reçoit une invitation à accepter.</p>' +
+        (e.synchronises !== undefined ? '<p class="small" style="margin:0">' + e.synchronises + ' affectation(s) recopiée(s) sur ' + e.total + '.</p>' : '') +
+        '<div class="row"><a class="btn primary" href="' + esc(e.lien) + '" target="_blank" rel="noopener">Ouvrir dans Google Agenda</a><button class="btn ghost" id="agRe">Tout resynchroniser</button><button class="btn danger small" id="agOff">Arrêter la synchronisation</button></div>'
+      : '<p style="margin:0">Activez la synchronisation : un agenda <b>« ' + esc(e.nom) + ' »</b> est créé dans votre compte Google, et tout le planning (depuis 30 jours) y est recopié. Ensuite, chaque modification dans l\'intranet s\'y reporte, et chaque collaborateur reçoit une invitation à accepter pour ses affectations.</p><div class="row"><button class="btn primary" id="agOn">Activer la synchronisation</button></div>') +
+      (e.sansAdresse && e.sansAdresse.length ? '<p class="small" style="margin:0;color:var(--warn)">Sans adresse e-mail, donc sans invitation : ' + esc(e.sansAdresse.join(', ')) + '. Ajoutez-la dans leur fiche (Utilisateurs) ou demandez-leur de la renseigner dans « Mon profil ».</p>' : '') +
+      '<p class="muted small" style="margin:0">Le sens est intranet → Google Agenda : une modification faite directement dans Google Agenda n\'est pas reprise dans l\'intranet.</p><div class="row"><button class="btn ghost" id="agX">Fermer</button></div>';
+    $('agX').onclick = function () { m.fermer(); };
+    var action = function (nom, b, txt) { b.disabled = true; b.textContent = txt; call(nom).then(dessiner).catch(function (x) { echec(x); dessiner(e); }); };
+    if ($('agOn')) $('agOn').onclick = function () { action('agendaActiver', $('agOn'), 'Création et recopie…'); };
+    if ($('agRe')) $('agRe').onclick = function () { action('agendaResync', $('agRe'), 'Recopie…'); };
+    if ($('agOff')) $('agOff').onclick = function () { var b = $('agOff'); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Confirmer l\'arrêt'; return; } action('agendaDesactiver', b, 'Arrêt…'); };
+  };
+  call('agendaEtat').then(dessiner).catch(function (x) { m.remove(); echec(x); });
+}
+
 /* ---------- Mon profil ---------- */
 VUES.profil = function () {
   var u = S.user;
   $('view').innerHTML = '<div class="head"><h2>Mon profil</h2><span class="meta">Identifiant : ' + esc(u.identifiant) + '</span></div>' +
     '<form class="card" id="prF"><div class="fgrid"><div><span class="tag">Nom</span><div>' + esc(u.prenom + ' ' + u.nom) + '</div></div><div><span class="tag">Poste</span><div>' + esc(u.poste || '—') + '</div></div></div><div class="fgrid"><label class="f">Téléphone<input name="telephone" value="' + esc(u.telephone) + '" maxlength="40"></label><label class="f">E-mail<input name="email" type="email" value="' + esc(u.email) + '" maxlength="120"></label></div><div class="row"><button class="btn primary">Enregistrer</button><span class="autosave" id="prAuto"></span></div></form>' +
     '<form class="card" id="mpF"><span class="tag">Changer mon mot de passe</span><div class="fgrid"><label class="f">Mot de passe actuel<input type="password" name="ancien" autocomplete="current-password" required></label><label class="f">Nouveau<input type="password" name="nouveau" autocomplete="new-password" required></label><label class="f">Confirmer<input type="password" name="nouveau2" autocomplete="new-password" required></label></div><div class="err" id="mpErr"></div><div><button class="btn primary">Changer le mot de passe</button></div></form>' +
+    '<div class="card" id="agCarte"><span class="tag">Mon agenda</span><p class="muted small" style="margin:0">Chargement…</p></div>' +
     '<div class="card"><span class="tag">Mes accès</span><div class="chips">' + Object.keys(LIB_MOD).map(function (k) { return { k: k, l: LIB_MOD[k][0] }; }).map(function (m) { var n = niveau(m.k); return '<span class="pill ' + (n === 'modif' ? 'gold' : n === 'lecture' ? 'ok' : '') + '">' + m.l + ' : ' + (n === 'modif' ? 'modification' : n === 'lecture' ? 'consultation' : 'aucun') + '</span>'; }).join('') + '</div></div>';
   var sauverProfil = function (d) { return call('updateProfile', { profil: d }).then(function (x) { S.user = x; }); };
   S.autoVue = autoSave($('prF'), { ind: $('prAuto'), save: sauverProfil });
+  call('monAgenda').then(carteAgenda).catch(function () { $('agCarte').hidden = true; });
   $('prF').onsubmit = function (ev) { ev.preventDefault(); sauverProfil(formData($('prF'))).then(function () { toast('Profil enregistré.'); }).catch(echec); };
   $('mpF').onsubmit = function (ev) { ev.preventDefault(); var d = formData($('mpF')); $('mpErr').textContent = ''; if (d.nouveau !== d.nouveau2) { $('mpErr').textContent = 'Les deux mots de passe ne sont pas identiques.'; return; } call('changePassword', { ancien: d.ancien, nouveau: d.nouveau }).then(function () { $('mpF').reset(); toast('Mot de passe changé.'); }).catch(function (e) { $('mpErr').textContent = e.message; }); };
   return Promise.resolve();
@@ -3554,6 +3857,7 @@ var LIB_MOD = {
   photos: ['Photos de chantier', 'voir', 'ajouter des photos'],
   devis: ['Logiciel de devis', 'ouvrir le logiciel', 'et le mettre à jour'],
   calculateur: ['Calculateur de coût', 'calculer et enregistrer ses calculs', 'voir tous les calculs et modifier les prix'],
+  ik: ['Indemnités kilométriques', 'consulter les trajets et les montants', 'cocher les trajets, calculer, régler les véhicules'],
   factures: ['Comptabilité (factures, banque, TVA, bilan)', 'consulter factures, TVA, résultat et bilan', 'lire des factures et relevés, valider, rapprocher, modifier']
 };
 VUES.admin = function () {
