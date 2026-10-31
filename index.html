@@ -2874,8 +2874,9 @@ function lireTableau(file) {
     return xlsxPret.then(function (X) {
       return new Promise(function (ok) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.readAsArrayBuffer(file); }).then(function (buf) {
         var wb = X.read(buf, { type: 'array', cellDates: true });
-        var ws = wb.Sheets[wb.SheetNames[0]];
-        return X.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'dd/mm/yyyy', defval: '' }).map(function (l) { return l.map(function (c) { return c instanceof Date ? isoJour(c) : String(c == null ? '' : c).trim(); }); });
+        // la feuille qui contient le plus de lignes (une première feuille vide est fréquente)
+        var ws = wb.SheetNames.map(function (n) { return wb.Sheets[n]; }).sort(function (a, b) { var t = function (w) { var r = w['!ref'] ? X.utils.decode_range(w['!ref']) : null; return r ? (r.e.r - r.s.r + 1) * (r.e.c - r.s.c + 1) : 0; }; return t(b) - t(a); })[0];
+        return X.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'dd/mm/yyyy', defval: '' }).map(function (l) { return l.map(function (c) { return c instanceof Date ? (c.getFullYear() < 1901 ? ('0' + c.getHours()).slice(-2) + ':' + ('0' + c.getMinutes()).slice(-2) : isoJour(c)) : String(c == null ? '' : c).trim(); }); });
       });
     });
   }
@@ -3720,7 +3721,7 @@ function dessinerIk(D, P, info) {
       '<div><span class="tag">Véhicule</span><div class="small">' + (R.cv === 3 ? '3 CV et moins' : R.cv === 7 ? '7 CV et plus' : R.cv + ' CV') + (R.electrique ? ' · électrique (+20 %)' : '') + '<br><span class="muted">Départ : ' + esc(R.domicile) + '</span></div></div></div></div>' +
       (info ? '<div class="card" style="border-color:var(--warn)"><span class="small">' + esc(info) + '</span></div>' : '') +
       '<div class="grid"><div class="card"><span class="tag">Trajets</span><b style="font-size:22px">' + D.trajets.length + '</b></div><div class="card"><span class="tag">Km cumulés (aller-retour)</span><b style="font-size:22px">' + num1(totalKm) + ' km</b></div><div class="card"><span class="tag">Km à calculer</span><b style="font-size:22px">' + manquants + '</b><span class="muted small">' + aCalculer + ' journée(s) à calculer</span></div><div class="card"><span class="tag">Indemnité ' + esc(D.annee) + '</span><b style="font-size:22px">' + eur(total) + '</b><span class="muted small">' + (totalKm ? eur(taux, 3).replace(' €', '') + ' €/km en moyenne' : '') + '</span></div></div>' +
-      '<div class="row">' + (modif ? '<button class="btn primary small" id="ikCalc"' + (aCalculer ? '' : ' disabled') + '>Calculer les distances' + (aCalculer ? ' (' + aCalculer + ' j)' : '') + '</button><button class="btn ghost small" id="ikAdd">+ Ajouter un trajet</button><label class="btn ghost small upl">Importer l\'ancien outil (CSV)<input type="file" accept=".csv,text/csv" id="ikImp"></label>' : '') + '<button class="btn ghost small" id="ikCsv">Exporter en CSV</button></div>' +
+      '<div class="row">' + (modif ? '<button class="btn primary small" id="ikCalc"' + (aCalculer ? '' : ' disabled') + '>Calculer les distances' + (aCalculer ? ' (' + aCalculer + ' j)' : '') + '</button><button class="btn ghost small" id="ikAdd">+ Ajouter un trajet</button><label class="btn ghost small upl">Importer l\'ancien outil (Excel ou CSV)<input type="file" accept=".csv,.xlsx,.xls,text/csv" id="ikImp"></label>' : '') + '<button class="btn ghost small" id="ikCsv">Exporter en CSV</button></div>' +
       (D.trajets.length ? '<div class="tablewrap"><table><thead><tr><th>Date</th><th>Client / lieu</th><th>Adresse</th><th>Km</th><th style="text-align:right">Indemnité</th><th></th></tr></thead><tbody>' +
         Object.keys(parJour).sort().map(function (d) {
           var j = D.jours[d] || {}, tj = 0;
@@ -3760,16 +3761,20 @@ function dessinerIk(D, P, info) {
     $('ikF').onsubmit = function (ev) { ev.preventDefault(); var d = formData($('ikF')); d.userId = D.userId; call('save', { table: 'IKTrajets', row: d }).then(function () { m.remove(); if (d.date.slice(0, 4) !== P.annee) P.annee = d.date.slice(0, 4); ouvrir('ik'); }).catch(echec); };
   };
   if ($('ikImp')) $('ikImp').onchange = function (e) {
-    var f = e.target.files[0]; if (!f) return;
-    var r = new FileReader();
-    r.onload = function () {
-      var l = decouperCsv(String(r.result)), en = l[0] || [], ix = function (re) { for (var i = 0; i < en.length; i++) if (re.test(normC(en[i]))) return i; return -1; };
-      var iD = ix(/^date/), iH = ix(/heure/), iC = ix(/client|lieu/), iA = ix(/adresse/), iK = ix(/^km/), iM = ix(/mode/);
+    var f = e.target.files[0]; if (!f) return; e.target.value = '';
+    lireTableau(f).then(function (l) {
+      var k0 = 0; for (var k = 0; k < Math.min(l.length, 10); k++) if (l[k].some(function (c) { return /^date$/i.test(String(c).trim()); })) { k0 = k; break; }
+      var en = l[k0] || [], ix = function (re) { for (var i = 0; i < en.length; i++) if (re.test(normC(en[i]).trim())) return i; return -1; };
+      var iD = ix(/^date/), iH = ix(/heure/), iC = ix(/client|lieu/), iA = ix(/adresse/), iK = ix(/^km/), iM = ix(/^mode/);
       if (iD < 0 || iC < 0) { toast('Fichier non reconnu : il faut au moins les colonnes Date et Client / lieu.'); return; }
-      var lignes = l.slice(1).map(function (x) { return { date: dateTableau(x[iD]), heure: iH >= 0 ? x[iH] : '', libelle: x[iC], adresse: iA >= 0 ? x[iA] : '', km: iK >= 0 ? String(x[iK]).replace(/\s/g, '').replace(',', '.') : '', manuel: iM >= 0 && /manuel/i.test(x[iM]) }; }).filter(function (x) { return x.date && x.libelle; });
-      call('ikImporter', { userId: D.userId, annee: D.annee, lignes: lignes }).then(function (x) { toast(x.importes + ' trajet(s) repris. Cliquez sur « Calculer les distances ».'); recharger(x); }).catch(echec);
-    };
-    r.readAsText(f, 'utf-8'); e.target.value = '';
+      var lignes = l.slice(k0 + 1).map(function (x) {
+        var km = iK >= 0 ? String(x[iK]).replace(/\s/g, '').replace(',', '.') : '', kmOk = /^\d+(\.\d+)?$/.test(km);
+        var h = iH >= 0 ? String(x[iH] || '').trim() : '', mh = /^(\d{1,2})[:h](\d{2})/.exec(h);
+        // un km déjà calculé dans l'ancien outil est gardé tel quel ; « Non calculé » sera calculé par Google Maps
+        return { date: dateTableau(x[iD]), heure: mh ? ('0' + mh[1]).slice(-2) + ':' + mh[2] : '', libelle: x[iC], adresse: iA >= 0 ? x[iA] : '', km: kmOk ? km : '', manuel: kmOk && (iM < 0 || /manuel/i.test(x[iM])) };
+      }).filter(function (x) { return x.date && x.libelle; });
+      return call('ikImporter', { userId: D.userId, annee: D.annee, lignes: lignes }).then(function (x) { toast(x.importes + ' trajet(s) repris. Cliquez sur « Calculer les distances » pour les autres.'); recharger(x); });
+    }).catch(echec);
   };
   if ($('ikCsv')) $('ikCsv').onclick = function () {
     var lignes = [], mois = {};
