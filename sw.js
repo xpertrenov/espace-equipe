@@ -1,5 +1,5 @@
 /* Service worker de l'Espace Équipe : garde l'application sur l'appareil pour qu'elle s'ouvre sans réseau. */
-var VERSION = 'fc54902d3e';
+var VERSION = '7c7846cfd5';
 var COQUILLE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png', './icon-maskable-512.png'];
 var EXTERNES = ['https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'];
 self.addEventListener('install', function (e) {

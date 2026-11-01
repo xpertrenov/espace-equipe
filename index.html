@@ -1232,7 +1232,7 @@ function ouvrirAppli(moi, P, opts) {
 
 /* ---------- Social ---------- */
 var CAT_SOCIAL = ['Informations', 'Documents RH', 'Mutuelle et prévoyance', 'Sécurité', 'Contacts utiles'];
-var TYPES_PERSO = ['Bulletin de salaire', 'Contrat de travail', 'Avenant au contrat', 'Attestation employeur', 'Certificat de travail', 'Solde de tout compte', 'Attestation France Travail', 'Entretien professionnel', 'Visite médicale', 'Habilitation et formation', 'Mutuelle et prévoyance', 'Note de frais', 'Arrêt de travail', 'Autre document RH'];
+var TYPES_PERSO = ['Bulletin de salaire', 'Contrat de travail', 'Avenant au contrat', 'Attestation employeur', 'Certificat de travail', 'Solde de tout compte', 'Attestation France Travail', 'Entretien professionnel', 'Visite médicale', 'Habilitation et formation', 'Mutuelle et prévoyance', 'Note de frais', 'Indemnités kilométriques', 'Arrêt de travail', 'Autre document RH'];
 function moisFr(p) { if (!p) return ''; var x = p.split('-'); return new Date(+x[0], +x[1] - 1, 15).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }); }
 VUES.social = function () {
   var voitInfos = niveau('social') !== 'aucun';
@@ -3720,10 +3720,41 @@ function formVehicules(userId, R, ensuite) {
   $('vhX').onclick = function () { m.fermer(); };
   $('vhOk').onclick = function () { lire(); if (V.slice(1).some(function (v) { return !v.depuis; })) { toast('Indiquez la date de chaque changement de véhicule.'); return; } call('ikReglages', { userId: userId, annee: (S.cache.ikP || {}).annee, reglages: { vehicules: V } }).then(function (x) { m.remove(); toast('Véhicules enregistrés.'); ensuite(x); }).catch(echec); };
 }
+/** Montants par mois pour la paie (même règle que le relevé) : barème appliqué au cumul de chaque véhicule, différence d'un mois à l'autre. */
+function moisIk(D) {
+  var R = D.reglages, VH = R.vehicules, jours = {};
+  D.trajets.forEach(function (t) { jours[t.date] = (jours[t.date] || 0) + nb(t.km); });
+  Object.keys(D.jours).forEach(function (d) { if (D.jours[d].retour != null) jours[d] = (jours[d] || 0) + D.jours[d].retour; });
+  var cumul = VH.map(function () { return 0; }), out = [], total = 0, totalKm = 0;
+  for (var m = 1; m <= 12; m++) {
+    var cle = D.annee + '-' + ('0' + m).slice(-2), avant = cumul.slice(), km = 0;
+    Object.keys(jours).forEach(function (d) { if (d.slice(0, 7) === cle) { cumul[vehiculeLe(R, d)] += jours[d]; km += jours[d]; } });
+    var montant = VH.reduce(function (s, v, i) { return s + montantIk(cumul[i], v.cv, v.electrique) - montantIk(avant[i], v.cv, v.electrique); }, 0);
+    total += montant; totalKm += km;
+    out.push({ mois: cle, km: km, montant: Math.round(montant * 100) / 100, cumulKm: totalKm, cumulMontant: total });
+  }
+  return out;
+}
 VUES.ik = function () {
   var P = S.cache.ikP || (S.cache.ikP = { userId: S.user.id, annee: String(new Date().getFullYear()), onglet: 'calcul' });
   return call('ikDonnees', { userId: P.userId, annee: P.annee }).then(function (D) { dessinerIk(D, P); });
 };
+function tableMoisIk(D, modif) {
+  var mm = moisIk(D), rel = {}, auj = isoJour(new Date()).slice(0, 7);
+  (D.releves || []).forEach(function (r) { rel[r.mois] = r; });
+  var lignes = mm.filter(function (x) { return x.km || rel[x.mois]; });
+  if (!lignes.length) return '';
+  return '<div class="card"><span class="tag">Mois par mois · à reporter sur le bulletin de paie</span>' +
+    '<div class="tablewrap"><table><thead><tr><th>Mois</th><th style="text-align:right">Km</th><th style="text-align:right">Indemnité du mois</th><th style="text-align:right">Cumul de l\'année</th><th>Relevé (Drive et « Mes documents »)</th></tr></thead><tbody>' +
+    lignes.map(function (x) {
+      var r = rel[x.mois], change = r && Math.abs(nb(r.montant) - x.montant) > 0.009, lib = new Date(x.mois + '-15').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      return '<tr><td><b>' + esc(lib) + '</b></td><td style="text-align:right">' + num1(x.km) + ' km</td><td style="text-align:right"><b>' + eur(x.montant) + '</b></td><td style="text-align:right" class="small">' + num1(x.cumulKm) + ' km · ' + eur(x.cumulMontant) + '</td><td class="small">' +
+        (r ? '<button class="btn ghost small" data-ikpdf="' + esc(r.fileId) + '" data-nom="' + esc(r.nomFichier) + '">Ouvrir</button> enregistré le ' + esc(dateFr(String(r.date).slice(0, 10))) + ' (' + eur(nb(r.montant)) + ')' + (change ? ' <span class="pill warn">trajets modifiés depuis</span>' : '') : x.mois < auj ? '<span class="pill warn">à enregistrer</span>' : '<span class="muted">mois en cours</span>') +
+        (modif ? ' <button class="btn ' + (r && !change ? 'ghost' : 'primary') + ' small" data-ikrel="' + x.mois + '">' + (r ? 'Refaire' : 'Enregistrer le relevé') + '</button>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    (modif ? '<div class="row"><select id="ikRelM" style="padding:7px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2)">' + mm.map(function (x) { return '<option value="' + x.mois + '"' + (x.mois === (function () { var d = new Date(); d.setDate(0); return isoJour(d).slice(0, 7); })() ? ' selected' : '') + '>' + esc(new Date(x.mois + '-15').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })) + '</option>'; }).join('') + '</select><button class="btn ghost small" id="ikRelTous">Enregistrer les relevés de tous les collaborateurs pour ce mois</button></div>' : '') +
+    '<p class="muted small" style="margin:0">Le barème est progressif sur l\'année : l\'indemnité d\'un mois est la différence entre le montant du cumul à la fin du mois et celui à la fin du mois précédent. Les mois additionnés donnent exactement l\'indemnité de l\'année. Le relevé PDF est rangé dans le Drive (Indemnités km › année) et dans « Mes documents » du collaborateur.</p></div>';
+}
 function dessinerIk(D, P, info) {
   var modif = peut('ik'), R = D.reglages, an = new Date().getFullYear();
   var parJour = {}; D.trajets.forEach(function (t) { (parJour[t.date] = parJour[t.date] || []).push(t); });
@@ -3747,6 +3778,7 @@ function dessinerIk(D, P, info) {
       (info ? '<div class="card" style="border-color:var(--warn)"><span class="small">' + esc(info) + '</span></div>' : '') +
       '<div class="grid"><div class="card"><span class="tag">Trajets</span><b style="font-size:22px">' + D.trajets.length + '</b></div><div class="card"><span class="tag">Km cumulés (aller-retour)</span><b style="font-size:22px">' + num1(totalKm) + ' km</b></div><div class="card"><span class="tag">Km à calculer</span><b style="font-size:22px">' + manquants + '</b><span class="muted small">' + aCalculer + ' journée(s) à calculer</span></div><div class="card"><span class="tag">Indemnité ' + esc(D.annee) + '</span><b style="font-size:22px">' + eur(total) + '</b><span class="muted small">' + (VH.length > 1 ? VH.map(function (v, i) { return libCv(v.cv) + ' : ' + num1(kmV[i]) + ' km → ' + eur(montV[i]); }).join('<br>') : totalKm ? eur(taux, 3).replace(' €', '') + ' €/km en moyenne' : '') + '</span></div></div>' +
       '<div class="row">' + (modif ? '<button class="btn primary small" id="ikCalc"' + (aCalculer ? '' : ' disabled') + '>Calculer les distances' + (aCalculer ? ' (' + aCalculer + ' j)' : '') + '</button><button class="btn ghost small" id="ikAdd">+ Ajouter un trajet</button><label class="btn ghost small upl">Importer l\'ancien outil (Excel ou CSV)<input type="file" accept=".csv,.xlsx,.xls,text/csv" id="ikImp"></label>' : '') + '<button class="btn ghost small" id="ikCsv">Exporter en CSV</button></div>' +
+      tableMoisIk(D, modif) +
       (D.trajets.length ? '<div class="tablewrap"><table><thead><tr><th>Date</th><th>Client / lieu</th><th>Adresse</th><th>Km</th><th style="text-align:right">Indemnité</th><th></th></tr></thead><tbody>' +
         Object.keys(parJour).sort().map(function (d) {
           var j = D.jours[d] || {}, tj = 0;
@@ -3766,6 +3798,10 @@ function dessinerIk(D, P, info) {
   }
   var recharger = function (x, msg) { dessinerIk(x, P, msg); };
   $('view').querySelectorAll('[data-iko]').forEach(function (b) { b.onclick = function () { P.onglet = b.dataset.iko; dessinerIk(D, P); }; });
+  $('view').querySelectorAll('[data-ikpdf]').forEach(function (b) { b.onclick = function () { ouvrirDirect(b.dataset.ikpdf, b.dataset.nom); }; });
+  var faireReleve = function (params, b) { var t = b.textContent; b.disabled = true; b.textContent = 'Enregistrement…'; call('ikReleve', params).then(function (x) { toast(x.releves.length ? x.releves.length + ' relevé(s) enregistré(s) dans le Drive et dans « Mes documents ».' : 'Aucun trajet ce mois-là.'); return call('ikDonnees', { userId: D.userId, annee: D.annee }); }).then(function (x) { recharger(x); }).catch(function (e) { b.disabled = false; b.textContent = t; echec(e); }); };
+  $('view').querySelectorAll('[data-ikrel]').forEach(function (b) { b.onclick = function () { faireReleve({ userId: D.userId, mois: b.dataset.ikrel }, b); }; });
+  if ($('ikRelTous')) $('ikRelTous').onclick = function () { faireReleve({ tous: true, mois: $('ikRelM').value }, $('ikRelTous')); };
   if ($('ikVeh')) $('ikVeh').onclick = function () { formVehicules(D.userId, R, function (x) { recharger(x); }); };
   $('view').querySelectorAll('[data-ikv]').forEach(function (b) { b.onclick = function () { var c = D.collaborateurs.filter(function (x) { return x.id === b.dataset.ikv; })[0]; formVehicules(c.id, c.reglages, function () { ouvrir('ik'); }); }; });
   if ($('ikU')) $('ikU').onchange = function () { P.userId = $('ikU').value; ouvrir('ik'); };
