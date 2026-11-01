@@ -3697,6 +3697,24 @@ function montantIk(km, cv, electrique) {
   var t = BAREME_IK[Math.min(7, Math.max(3, +cv || 4))], m = km <= t[0][0] ? km * t[0][1] : km <= t[1][0] ? km * t[1][1] + t[1][2] : km * t[2][1];
   return electrique ? m * 1.2 : m;
 }
+function libCv(cv) { return +cv === 3 ? '3 CV et moins' : +cv === 7 ? '7 CV et plus' : cv + ' CV'; }
+function vehiculeLe(R, date) { var v = R.vehicules || [{ depuis: '2000-01-01', cv: R.cv, electrique: R.electrique }], i = 0; v.forEach(function (x, k) { if (x.depuis <= date) i = k; }); return i; }
+function libVehicules(R) { return (R.vehicules || []).map(function (v, i) { return libCv(v.cv) + (v.electrique ? ' électrique' : '') + (i ? ' depuis le ' + dateFr(v.depuis) : ''); }).join(' · puis '); }
+/** Véhicules successifs d'un collaborateur : le barème s'applique séparément aux km de chaque véhicule. */
+function formVehicules(userId, R, ensuite) {
+  var V = JSON.parse(JSON.stringify(R.vehicules || [{ depuis: '2000-01-01', cv: R.cv || 4, electrique: !!R.electrique }]));
+  var m = modale('Véhicules', '<div id="vhL" style="display:grid;gap:8px"></div><div><button type="button" class="btn ghost small" id="vhAdd">+ Nouveau véhicule à partir d\'une date</button></div><p class="muted small" style="margin:0">Changement de véhicule en cours d\'année : le barème est appliqué séparément aux kilomètres parcourus avec chaque véhicule.</p><div class="row"><button class="btn primary" id="vhOk">Enregistrer</button><button class="btn ghost" id="vhX">Annuler</button></div>');
+  var lire = function () { $('vhL').querySelectorAll('[data-v]').forEach(function (r) { var v = V[+r.dataset.v]; r.querySelectorAll('[data-k]').forEach(function (el) { v[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value; }); }); };
+  var dessiner = function () {
+    $('vhL').innerHTML = V.map(function (v, i) { return '<div class="row" data-v="' + i + '" style="background:var(--surface-2);padding:8px;border-radius:8px">' + (i === 0 ? '<span class="small" style="min-width:150px"><b>Premier véhicule</b></span>' : '<label class="f">À partir du<input type="date" data-k="depuis" value="' + esc(v.depuis) + '"></label>') +
+      '<label class="f">Puissance fiscale<select data-k="cv">' + [3, 4, 5, 6, 7].map(function (c) { return '<option value="' + c + '"' + (+v.cv === c ? ' selected' : '') + '>' + libCv(c) + '</option>'; }).join('') + '</select></label><label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-k="electrique"' + (v.electrique ? ' checked' : '') + '> Électrique (+20 %)</label>' + (i ? '<button type="button" class="btn danger small" data-vx="' + i + '">✕</button>' : '') + '</div>'; }).join('');
+    $('vhL').querySelectorAll('[data-vx]').forEach(function (b) { b.onclick = function () { lire(); V.splice(+b.dataset.vx, 1); dessiner(); }; });
+  };
+  dessiner();
+  $('vhAdd').onclick = function () { lire(); V.push({ depuis: new Date().getFullYear() + '-01-01', cv: V[V.length - 1].cv, electrique: false }); dessiner(); };
+  $('vhX').onclick = function () { m.fermer(); };
+  $('vhOk').onclick = function () { lire(); if (V.slice(1).some(function (v) { return !v.depuis; })) { toast('Indiquez la date de chaque changement de véhicule.'); return; } call('ikReglages', { userId: userId, annee: (S.cache.ikP || {}).annee, reglages: { vehicules: V } }).then(function (x) { m.remove(); toast('Véhicules enregistrés.'); ensuite(x); }).catch(echec); };
+}
 VUES.ik = function () {
   var P = S.cache.ikP || (S.cache.ikP = { userId: S.user.id, annee: String(new Date().getFullYear()), onglet: 'calcul' });
   return call('ikDonnees', { userId: P.userId, annee: P.annee }).then(function (D) { dessinerIk(D, P); });
@@ -3704,23 +3722,25 @@ VUES.ik = function () {
 function dessinerIk(D, P, info) {
   var modif = peut('ik'), R = D.reglages, an = new Date().getFullYear();
   var parJour = {}; D.trajets.forEach(function (t) { (parJour[t.date] = parJour[t.date] || []).push(t); });
-  var totalKm = 0, manquants = 0;
-  Object.keys(parJour).forEach(function (d) { parJour[d].forEach(function (t) { if (t.km === '' || t.km == null) manquants++; else totalKm += nb(t.km); }); totalKm += nb((D.jours[d] || {}).retour); });
-  var total = montantIk(totalKm, R.cv, R.electrique), taux = totalKm ? total / totalKm : 0;
+  var totalKm = 0, manquants = 0, VH = R.vehicules || [{ depuis: '2000-01-01', cv: R.cv, electrique: R.electrique }], kmV = VH.map(function () { return 0; });
+  Object.keys(parJour).forEach(function (d) { var v = vehiculeLe(R, d), k = 0; parJour[d].forEach(function (t) { if (t.km === '' || t.km == null) manquants++; else k += nb(t.km); }); k += nb((D.jours[d] || {}).retour); kmV[v] += k; totalKm += k; });
+  // barème appliqué séparément aux km de chaque véhicule ; taux moyen propre à chaque véhicule pour répartir par trajet
+  var montV = kmV.map(function (k, i) { return montantIk(k, VH[i].cv, VH[i].electrique); }), total = montV.reduce(function (s, x) { return s + x; }, 0);
+  var tauxV = kmV.map(function (k, i) { return k ? montV[i] / k : 0; }), taux = totalKm ? total / totalKm : 0, tauxJ = function (d) { return tauxV[vehiculeLe(R, d)]; };
   var aCalculer = Object.keys(D.jours).filter(function (d) { return !D.jours[d].calcule && D.jours[d].points.length; }).length;
   var h = '<div class="head"><h2>Indemnités kilométriques</h2><span class="meta">Trajets en véhicule personnel · barème fiscal</span></div>' +
     '<div class="row" role="tablist"><button class="btn small ' + (P.onglet === 'calcul' ? 'primary' : 'ghost') + '" data-iko="calcul">Calcul</button>' + (modif ? '<button class="btn small ' + (P.onglet === 'collab' ? 'primary' : 'ghost') + '" data-iko="collab">Collaborateurs</button>' : '') + '</div>';
   if (P.onglet === 'collab' && modif) {
     h += '<p class="muted small" style="margin:0">Véhicule et adresse de départ de chacun. Les trajets comptés sont les affectations du planning où la case « Indemnités km » est cochée (véhicule personnel), plus les trajets ajoutés à la main.</p>' +
-      '<div class="tablewrap"><table><thead><tr><th>Collaborateur</th><th>Puissance fiscale</th><th>Électrique</th><th>Adresse de départ (domicile)</th><th></th></tr></thead><tbody>' +
-      D.collaborateurs.map(function (c) { return '<tr data-ikc="' + esc(c.id) + '"><td><b>' + esc(c.nom) + '</b></td><td><select data-k="cv">' + [3, 4, 5, 6, 7].map(function (v) { return '<option value="' + v + '"' + (+c.reglages.cv === v ? ' selected' : '') + '>' + (v === 3 ? '3 CV et moins' : v === 7 ? '7 CV et plus' : v + ' CV') + '</option>'; }).join('') + '</select></td><td><input type="checkbox" data-k="electrique"' + (c.reglages.electrique ? ' checked' : '') + '></td><td><input data-k="domicile" maxlength="200" value="' + esc(c.reglages.domicile) + '" style="width:100%;min-width:220px;padding:7px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2)"></td><td><button class="btn ghost small" data-iks="' + esc(c.id) + '">Enregistrer</button></td></tr>'; }).join('') + '</tbody></table></div>';
+      '<div class="tablewrap"><table><thead><tr><th>Collaborateur</th><th>Véhicule(s)</th><th>Adresse de départ (domicile)</th><th></th></tr></thead><tbody>' +
+      D.collaborateurs.map(function (c) { return '<tr data-ikc="' + esc(c.id) + '"><td><b>' + esc(c.nom) + '</b></td><td class="small">' + esc(libVehicules(c.reglages)) + ' <button class="btn ghost small" data-ikv="' + esc(c.id) + '">Modifier</button></td><td><input data-k="domicile" maxlength="200" value="' + esc(c.reglages.domicile) + '" style="width:100%;min-width:220px;padding:7px;border:1.5px solid var(--line);border-radius:6px;background:var(--surface-2)"></td><td><button class="btn ghost small" data-iks="' + esc(c.id) + '">Enregistrer</button></td></tr>'; }).join('') + '</tbody></table></div>';
     $('view').innerHTML = h;
   } else {
     h += '<div class="card"><div class="fgrid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))"><label class="f">Collaborateur<select id="ikU">' + D.collaborateurs.map(function (c) { return '<option value="' + esc(c.id) + '"' + (c.id === D.userId ? ' selected' : '') + '>' + esc(c.nom) + '</option>'; }).join('') + '</select></label>' +
       '<label class="f">Année<select id="ikA">' + [an + 1, an, an - 1, an - 2].map(function (a) { return '<option' + (String(a) === D.annee ? ' selected' : '') + '>' + a + '</option>'; }).join('') + '</select></label>' +
-      '<div><span class="tag">Véhicule</span><div class="small">' + (R.cv === 3 ? '3 CV et moins' : R.cv === 7 ? '7 CV et plus' : R.cv + ' CV') + (R.electrique ? ' · électrique (+20 %)' : '') + '<br><span class="muted">Départ : ' + esc(R.domicile) + '</span></div></div></div></div>' +
+      '<div><span class="tag">Véhicule</span><div class="small">' + esc(libVehicules(R)) + (modif ? ' <button class="btn ghost small" id="ikVeh">Changer</button>' : '') + '<br><span class="muted">Départ : ' + esc(R.domicile) + '</span></div></div></div></div>' +
       (info ? '<div class="card" style="border-color:var(--warn)"><span class="small">' + esc(info) + '</span></div>' : '') +
-      '<div class="grid"><div class="card"><span class="tag">Trajets</span><b style="font-size:22px">' + D.trajets.length + '</b></div><div class="card"><span class="tag">Km cumulés (aller-retour)</span><b style="font-size:22px">' + num1(totalKm) + ' km</b></div><div class="card"><span class="tag">Km à calculer</span><b style="font-size:22px">' + manquants + '</b><span class="muted small">' + aCalculer + ' journée(s) à calculer</span></div><div class="card"><span class="tag">Indemnité ' + esc(D.annee) + '</span><b style="font-size:22px">' + eur(total) + '</b><span class="muted small">' + (totalKm ? eur(taux, 3).replace(' €', '') + ' €/km en moyenne' : '') + '</span></div></div>' +
+      '<div class="grid"><div class="card"><span class="tag">Trajets</span><b style="font-size:22px">' + D.trajets.length + '</b></div><div class="card"><span class="tag">Km cumulés (aller-retour)</span><b style="font-size:22px">' + num1(totalKm) + ' km</b></div><div class="card"><span class="tag">Km à calculer</span><b style="font-size:22px">' + manquants + '</b><span class="muted small">' + aCalculer + ' journée(s) à calculer</span></div><div class="card"><span class="tag">Indemnité ' + esc(D.annee) + '</span><b style="font-size:22px">' + eur(total) + '</b><span class="muted small">' + (VH.length > 1 ? VH.map(function (v, i) { return libCv(v.cv) + ' : ' + num1(kmV[i]) + ' km → ' + eur(montV[i]); }).join('<br>') : totalKm ? eur(taux, 3).replace(' €', '') + ' €/km en moyenne' : '') + '</span></div></div>' +
       '<div class="row">' + (modif ? '<button class="btn primary small" id="ikCalc"' + (aCalculer ? '' : ' disabled') + '>Calculer les distances' + (aCalculer ? ' (' + aCalculer + ' j)' : '') + '</button><button class="btn ghost small" id="ikAdd">+ Ajouter un trajet</button><label class="btn ghost small upl">Importer l\'ancien outil (Excel ou CSV)<input type="file" accept=".csv,.xlsx,.xls,text/csv" id="ikImp"></label>' : '') + '<button class="btn ghost small" id="ikCsv">Exporter en CSV</button></div>' +
       (D.trajets.length ? '<div class="tablewrap"><table><thead><tr><th>Date</th><th>Client / lieu</th><th>Adresse</th><th>Km</th><th style="text-align:right">Indemnité</th><th></th></tr></thead><tbody>' +
         Object.keys(parJour).sort().map(function (d) {
@@ -3730,17 +3750,19 @@ function dessinerIk(D, P, info) {
             var tag = t.kmMode === 'manuel' ? '<span class="ik-tag manuel">manuel</span>' : km != null ? '<span class="ik-tag">auto</span>' : '';
             return '<tr' + (i === 0 ? ' class="ik-jour"' : '') + '><td class="small">' + (i === 0 ? esc(dateFr(d)) : '') + '</td><td>' + esc(t.libelle) + ' <span class="pill" style="font-size:10px">' + (t.source === 'planning' ? 'planning' : 'ajouté') + '</span></td><td class="small muted">' + esc(t.adresse || '— adresse manquante') + '</td>' +
               '<td style="white-space:nowrap">' + (modif ? '<input class="ik-km" type="number" min="0" step="0.1" data-ikkm="' + esc(t.id) + '" value="' + (km == null ? '' : km) + '">' : (km == null ? '—' : num1(km))) + ' ' + tag + (modif && t.kmMode === 'manuel' ? ' <button class="btn ghost small" data-ikauto="' + esc(t.id) + '">auto</button>' : '') + '</td>' +
-              '<td style="text-align:right">' + (km ? eur(km * taux) : '<span class="muted">—</span>') + '</td><td>' + (modif && t.source !== 'planning' ? '<button class="btn danger small" data-ikdel="' + esc(t.id) + '">✕</button>' : '') + '</td></tr>';
+              '<td style="text-align:right">' + (km ? eur(km * tauxJ(d)) : '<span class="muted">—</span>') + '</td><td>' + (modif && t.source !== 'planning' ? '<button class="btn danger small" data-ikdel="' + esc(t.id) + '">✕</button>' : '') + '</td></tr>';
           }).join('');
           if (j.retour != null) tj += j.retour;
-          return lignes + (j.retour != null ? '<tr class="ik-retour"><td></td><td colspan="2">Retour au domicile</td><td>' + num1(j.retour) + ' km</td><td style="text-align:right">' + eur(j.retour * taux) + '</td><td></td></tr>' : '') +
-            '<tr class="ik-total"><td></td><td colspan="2">Total du jour (aller-retour)' + (j.points && j.points.length && !j.calcule ? ' <span class="pill warn">à calculer</span>' : '') + '</td><td>' + num1(tj) + ' km</td><td style="text-align:right">' + eur(tj * taux) + '</td><td></td></tr>';
+          return lignes + (j.retour != null ? '<tr class="ik-retour"><td></td><td colspan="2">Retour au domicile</td><td>' + num1(j.retour) + ' km</td><td style="text-align:right">' + eur(j.retour * tauxJ(d)) + '</td><td></td></tr>' : '') +
+            '<tr class="ik-total"><td></td><td colspan="2">Total du jour (aller-retour)' + (j.points && j.points.length && !j.calcule ? ' <span class="pill warn">à calculer</span>' : '') + '</td><td>' + num1(tj) + ' km</td><td style="text-align:right">' + eur(tj * tauxJ(d)) + '</td><td></td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="empty">Aucun trajet pour ' + esc(D.nom) + ' en ' + esc(D.annee) + '. Cochez « Indemnités km » sur ses affectations du planning, ou ajoutez un trajet.</div>') +
       '<p class="muted small">Chaque journée : domicile → rendez-vous dans l\'ordre des horaires → retour au domicile, calculé par Google Maps. Un km corrigé à la main passe en « manuel » et n\'est plus recalculé. Le barème est progressif sur le total de l\'année ; le montant par trajet est une répartition indicative.</p>';
     $('view').innerHTML = h;
   }
   var recharger = function (x, msg) { dessinerIk(x, P, msg); };
   $('view').querySelectorAll('[data-iko]').forEach(function (b) { b.onclick = function () { P.onglet = b.dataset.iko; dessinerIk(D, P); }; });
+  if ($('ikVeh')) $('ikVeh').onclick = function () { formVehicules(D.userId, R, function (x) { recharger(x); }); };
+  $('view').querySelectorAll('[data-ikv]').forEach(function (b) { b.onclick = function () { var c = D.collaborateurs.filter(function (x) { return x.id === b.dataset.ikv; })[0]; formVehicules(c.id, c.reglages, function () { ouvrir('ik'); }); }; });
   if ($('ikU')) $('ikU').onchange = function () { P.userId = $('ikU').value; ouvrir('ik'); };
   if ($('ikA')) $('ikA').onchange = function () { P.annee = $('ikA').value; ouvrir('ik'); };
   if ($('ikCalc')) $('ikCalc').onclick = function () { var b = $('ikCalc'); b.disabled = true; b.textContent = 'Calcul en cours…'; call('ikCalculer', { userId: D.userId, annee: D.annee }).then(function (x) { recharger(x, x.erreurs ? x.erreurs + ' journée(s) non calculée(s) : adresse introuvable ou quota Google Maps du jour atteint. Corrigez l\'adresse du chantier ou saisissez les km à la main.' : ''); toast(x.calcules + ' journée(s) calculée(s).'); }).catch(function (e) { b.disabled = false; b.textContent = 'Calculer les distances'; echec(e); }); };
@@ -3780,10 +3802,13 @@ function dessinerIk(D, P, info) {
     var lignes = [], mois = {};
     Object.keys(parJour).sort().forEach(function (d) {
       var j = D.jours[d] || {};
-      parJour[d].forEach(function (t) { var km = nb(t.km); lignes.push([dateFr(d), t.heure, t.libelle, t.adresse, km, t.kmMode === 'manuel' ? 'Manuel' : km ? 'Auto (Google Maps)' : 'À calculer', km * taux]); var k = d.slice(0, 7); mois[k] = mois[k] || [0, 0]; mois[k][0] += km; mois[k][1] += km * taux; });
-      if (j.retour != null) { lignes.push([dateFr(d), '', 'Retour domicile', R.domicile, j.retour, 'Auto (Google Maps)', j.retour * taux]); var k2 = d.slice(0, 7); mois[k2] = mois[k2] || [0, 0]; mois[k2][0] += j.retour; mois[k2][1] += j.retour * taux; }
+      var tx = tauxJ(d), vl = libCv(VH[vehiculeLe(R, d)].cv);
+      parJour[d].forEach(function (t) { var km = nb(t.km); lignes.push([dateFr(d), t.heure, t.libelle, t.adresse, km, (t.kmMode === 'manuel' ? 'Manuel' : km ? 'Auto (Google Maps)' : 'À calculer') + ' · ' + vl, km * tx]); var k = d.slice(0, 7); mois[k] = mois[k] || [0, 0]; mois[k][0] += km; mois[k][1] += km * tx; });
+      if (j.retour != null) { lignes.push([dateFr(d), '', 'Retour domicile', R.domicile, j.retour, 'Auto (Google Maps) · ' + vl, j.retour * tx]); var k2 = d.slice(0, 7); mois[k2] = mois[k2] || [0, 0]; mois[k2][0] += j.retour; mois[k2][1] += j.retour * tx; }
     });
-    lignes.push([], ['TOTAL', '', D.nom, '', totalKm, (R.cv === 7 ? '7 CV et plus' : R.cv + ' CV') + (R.electrique ? ' électrique' : ''), total], [], ['Récapitulatif mensuel'], ['Mois', '', '', '', 'Km', '', 'Indemnité (EUR)']);
+    lignes.push([]);
+    VH.forEach(function (v, i) { if (kmV[i] || VH.length === 1) lignes.push(['Véhicule ' + libCv(v.cv) + (v.electrique ? ' électrique' : ''), i ? 'depuis le ' + dateFr(v.depuis) : '', '', '', kmV[i], 'barème appliqué à ces km', montV[i]]); });
+    lignes.push(['TOTAL', '', D.nom, '', totalKm, '', total], [], ['Récapitulatif mensuel'], ['Mois', '', '', '', 'Km', '', 'Indemnité (EUR)']);
     Object.keys(mois).sort().forEach(function (k) { lignes.push([new Date(k + '-15').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }), '', '', '', mois[k][0], '', mois[k][1]]); });
     telechargerCsv('indemnites-km-' + D.nom.replace(/[^\w]+/g, '-') + '-' + D.annee + '.csv', ['Date', 'Heure', 'Client / lieu', 'Adresse', 'Km', 'Mode', 'Indemnité (EUR)'], lignes);
   };
