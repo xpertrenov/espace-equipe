@@ -165,7 +165,7 @@ legend { font: 800 18px var(--f-display); text-transform: uppercase; padding: 0 
 .modal .box.wide { max-width: 860px; }
 .modal h3 { font-size: 24px; text-transform: uppercase; }
 .viewer img { width: 100%; height: auto; border-radius: 8px; }
-.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 600; z-index: 60; max-width: calc(100% - 32px); }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-weight: 600; z-index: 60; max-width: calc(100% - 32px); cursor: pointer; }
 .ecole { position: fixed; inset: 0; z-index: 40; background: var(--bg); display: flex; flex-direction: column; }
 .ecole-bar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .ecole-bar b { font: 800 20px var(--f-display); text-transform: uppercase; flex: 1; }
@@ -802,8 +802,13 @@ function callGoogle(action, params) {
       .api(req);
   });
 }
-function toast(msg) { var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t); setTimeout(function () { t.remove(); }, 3200); }
-function echec(e) { toast((e && e.message) || 'Une erreur est survenue.'); }
+function toast(msg, ms) {
+  var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; t.title = 'Cliquer pour fermer';
+  t.onclick = function () { t.remove(); }; document.body.appendChild(t);
+  // temps d'affichage selon la longueur du message (les messages d'erreur détaillés restent lisibles)
+  setTimeout(function () { t.remove(); }, ms || Math.max(3200, Math.min(15000, String(msg).length * 70)));
+}
+function echec(e) { var m = (e && e.message) || 'Une erreur est survenue.'; toast(m, Math.max(7000, Math.min(20000, m.length * 90))); }
 function niveau(m) { return (S.user && S.user.perms && S.user.perms[m]) || 'aucun'; }
 function peut(m) { return niveau(m) === 'modif'; }
 function superAdmin() { return S.user && S.user.role === 'superadmin'; }
@@ -3849,7 +3854,7 @@ function fenetreAgenda() {
       (e.sansAdresse && e.sansAdresse.length ? '<p class="small" style="margin:0;color:var(--warn)">Sans adresse e-mail, donc sans invitation : ' + esc(e.sansAdresse.join(', ')) + '. Ajoutez-la dans leur fiche (Utilisateurs) ou demandez-leur de la renseigner dans « Mon profil ».</p>' : '') +
       '<p class="muted small" style="margin:0">Le sens est intranet → Google Agenda : une modification faite directement dans Google Agenda n\'est pas reprise dans l\'intranet.</p><div class="row"><button class="btn ghost" id="agX">Fermer</button></div>';
     $('agX').onclick = function () { m.fermer(); };
-    var action = function (nom, b, txt) { b.disabled = true; b.textContent = txt; call(nom).then(dessiner).catch(function (x) { echec(x); dessiner(e); }); };
+    var action = function (nom, b, txt) { b.disabled = true; b.textContent = txt; call(nom).then(dessiner).catch(function (x) { dessiner(e); var z = document.createElement('div'); z.className = 'card'; z.style.borderColor = 'var(--ko)'; z.innerHTML = '<span class="tag" style="color:var(--ko)">Synchronisation impossible</span><span class="small">' + esc((x && x.message) || 'Erreur') + '</span>'; $('agZ').insertBefore(z, $('agZ').firstChild); }); };
     if ($('agOn')) $('agOn').onclick = function () { action('agendaActiver', $('agOn'), 'Création et recopie…'); };
     if ($('agRe')) $('agRe').onclick = function () { action('agendaResync', $('agRe'), 'Recopie…'); };
     if ($('agOff')) $('agOff').onclick = function () { var b = $('agOff'); if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Confirmer l\'arrêt'; return; } action('agendaDesactiver', b, 'Arrêt…'); };
